@@ -7,6 +7,7 @@ import { createClient, type Client } from "@libsql/client";
 import { drizzle } from "drizzle-orm/libsql";
 
 import { cheminBaseDeDonnees } from "@/lib/chemins";
+import { appliquerMigrations } from "@/lib/db/migrations";
 import * as schema from "@/lib/db/schema";
 
 type Connexion = ReturnType<typeof creerConnexion>;
@@ -63,28 +64,77 @@ export function configurationBase(): {
   return { url: `file:${chemin}`, distante: false };
 }
 
+/**
+ * Enveloppe le client pour que TOUTE requête attende d'abord que le schéma
+ * soit en place.
+ *
+ * ⚠️ C'est ce qui rend le déploiement autonome. Les migrations ne peuvent plus
+ * être oubliées : elles ne sont pas déclenchées par une commande de démarrage
+ * — que l'hébergeur peut remplacer — mais par la première requête, qui a
+ * forcément lieu.
+ *
+ * Le coût est d'une promesse déjà résolue par requête après le premier appel.
+ *
+ * `appliquerMigrations` reçoit le client BRUT : lui passer le client enveloppé
+ * ferait attendre la migration… sa propre fin.
+ */
+function clientAvecSchemaAssure(brut: Client): Client {
+  let migration: Promise<void> | undefined;
+
+  const assurerSchema = () =>
+    (migration ??= appliquerMigrations(brut).catch((erreur) => {
+      // Réarmer : une panne passagère (réseau, base qui démarre) ne doit pas
+      // condamner le processus jusqu'au prochain déploiement.
+      migration = undefined;
+      throw erreur;
+    }));
+
+  // Seules les méthodes qui touchent réellement aux données attendent. `close`
+  // et `sync` doivent rester immédiates — sinon fermer une connexion
+  // déclencherait une migration.
+  const methodesQuiInterrogent = new Set(["execute", "batch", "transaction", "executeMultiple"]);
+
+  return new Proxy(brut, {
+    get(cible, propriete) {
+      const valeur = Reflect.get(cible, propriete, cible);
+      if (typeof valeur !== "function") return valeur;
+
+      const methode = valeur as (...args: unknown[]) => unknown;
+      if (!methodesQuiInterrogent.has(String(propriete))) return methode.bind(cible);
+
+      return async (...args: unknown[]) => {
+        await assurerSchema();
+        return methode.apply(cible, args);
+      };
+    },
+  });
+}
+
 function creerConnexion() {
   const config = configurationBase();
 
-  const client = createClient({
+  const brut = createClient({
     url: config.url,
     ...(config.authToken ? { authToken: config.authToken } : {}),
   });
-
-  cacheGlobal.__kelvynlabsClient = client;
 
   // SQLite n'applique PAS les clés étrangères par défaut. Sans cette ligne,
   // supprimer une formation laisserait ses chapitres orphelins.
   // Sur une base distante, le réglage est déjà géré côté serveur : on ignore
   // l'échec plutôt que d'empêcher le démarrage.
-  client.execute("PRAGMA foreign_keys = ON").catch(() => {});
+  // Ces PRAGMA passent par le client brut : ce sont des réglages de session,
+  // ils doivent précéder la migration, pas l'attendre.
+  brut.execute("PRAGMA foreign_keys = ON").catch(() => {});
 
   if (!config.distante) {
     // WAL : les lectures ne bloquent plus l'écriture et inversement. Sans lui,
     // un seul upload en cours ferait attendre toutes les pages.
-    client.execute("PRAGMA journal_mode = WAL").catch(() => {});
-    client.execute("PRAGMA busy_timeout = 5000").catch(() => {});
+    brut.execute("PRAGMA journal_mode = WAL").catch(() => {});
+    brut.execute("PRAGMA busy_timeout = 5000").catch(() => {});
   }
+
+  const client = clientAvecSchemaAssure(brut);
+  cacheGlobal.__kelvynlabsClient = client;
 
   return drizzle(client, { schema });
 }

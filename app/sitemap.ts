@@ -4,7 +4,7 @@ import { asc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { lecons } from "@/lib/db/schema";
 import { listerFormationsVisibles } from "@/lib/access";
-import { siteConfig } from "@/lib/site-config";
+import { urlSite } from "@/lib/url-site";
 
 /**
  * Plan du site.
@@ -17,7 +17,7 @@ import { siteConfig } from "@/lib/site-config";
 export const dynamic = "force-dynamic";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const base = siteConfig.url;
+  const base = await urlSite();
 
   const entrees: MetadataRoute.Sitemap = [
     { url: base, changeFrequency: "weekly", priority: 1 },

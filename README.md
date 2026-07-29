@@ -120,36 +120,44 @@ uploadés**.
 | Hébergement | Base | Fichiers |
 |---|---|---|
 | VPS avec volume Docker | fichier local (défaut) | disque du volume (défaut) |
-| Hostinger Node.js managé | **`DATABASE_URL` distante obligatoire** | **variables `S3_*` obligatoires** |
+| Hébergement mutualisé (Hostinger, cPanel) | fichier local **hors du répertoire de déploiement** (automatique) | disque, ou `S3_*` recommandé |
+| Vercel, Netlify, Render, Railway | **`DATABASE_URL` distante obligatoire** | **variables `S3_*` obligatoires** |
 
-Sur un hébergement managé, le projet est reconstruit depuis git à chaque
-déploiement : tout ce qui est écrit sur le disque de l'application disparaît.
-Un fichier SQLite local y serait effacé à chaque mise en ligne, avec toutes les
-formations.
+Sur un hébergement managé, le sous-arbre du site est remplacé à chaque
+déploiement : tout ce qui y est écrit disparaît. Un fichier SQLite y serait
+effacé à chaque mise en ligne, avec toutes les formations.
 
-**Le projet refuse de démarrer dans ce cas.** `scripts/migrer.mjs` détecte les
-hébergements à disque éphémère et s'arrête avec un message explicite tant que
-`DATABASE_URL` n'est pas renseignée. Mieux vaut un déploiement qui échoue tout
-de suite qu'un déploiement qui réussit, accepte du contenu, puis l'efface au
-suivant — panne qui ne se manifeste qu'une fois le mal fait.
+**Sur un hébergement mutualisé, c'est réglé automatiquement.** L'application
+détecte l'arborescence `/home/<compte>/domains/<site>/…` et place ses données
+dans `/home/<compte>/.kelvynlabs-data` — en dehors de ce qui est remplacé. Le
+dossier du compte, lui, survit d'un déploiement à l'autre. `DOSSIER_DONNEES`
+reste prioritaire si vous voulez choisir l'emplacement.
+
+**Sur une plateforme réellement éphémère** (Vercel et consorts), aucun dossier
+ne survit : le build s'arrête tant que `DATABASE_URL` n'est pas renseignée.
+Mieux vaut un déploiement qui échoue tout de suite qu'un déploiement qui
+réussit, accepte du contenu, puis l'efface au suivant — panne qui ne se
+manifeste qu'une fois le mal fait.
+
+Pour savoir où vous en êtes, interrogez `/api/sante` : le champ `persistance`
+répond précisément à la question « ce que je saisis survivra-t-il ? ».
 
 ## Déploiement sur Hostinger — Node.js managé
 
-Aucune clé API n'est nécessaire : tout se fait dans hPanel.
+Aucune clé API n'est nécessaire, et **aucune variable d'environnement n'est
+obligatoire** : importez le dépôt, déployez, le site fonctionne.
 
-### 1. Préparer les deux services (gratuits)
+L'application crée son schéma à la première requête et range ses données hors
+du répertoire de déploiement. Les services ci-dessous sont des améliorations,
+pas des prérequis.
 
-**Base de données — Turso**
-
-```bash
-curl -sSfL https://get.tur.so/install.sh | bash
-turso auth signup
-turso db create kelvynlabs
-turso db show kelvynlabs --url          # → DATABASE_URL
-turso db tokens create kelvynlabs       # → DATABASE_AUTH_TOKEN
-```
+### 1. Services optionnels (gratuits)
 
 **Fichiers — Cloudflare R2** (10 Go gratuits)
+
+Recommandé dès que vous ajoutez des images de couverture : sans lui les
+fichiers vivent sur le disque du compte, ce qui fonctionne mais ne se sauvegarde
+pas tout seul.
 
 Créez un bucket, puis un jeton d'API R2 avec accès en lecture/écriture. Relevez
 l'endpoint `https://<compte>.r2.cloudflarestorage.com`, le nom du bucket et les
@@ -171,22 +179,35 @@ les ressources des formations payantes.
 | Commande de build | `npm run build` |
 | Commande de démarrage | `npm start` |
 
-`npm start` applique les migrations avant de lancer le serveur : il n'y a
-aucune étape manuelle à ne pas oublier.
+⚠️ **La commande de démarrage n'a pas d'importance.** Certaines plateformes
+imposent la leur et ignorent celle que vous saisissez — c'est le cas ici. C'est
+pourquoi les migrations ne sont plus déclenchées au démarrage mais par la
+première requête reçue : rien de ce dont dépend le bon fonctionnement du site
+ne peut être court-circuité par l'hébergeur.
 
-### 3. Variables d'environnement
+### 3. Variables d'environnement — toutes facultatives
 
-| Variable | Valeur |
+| Variable | Effet si absente |
 |---|---|
-| `DATABASE_URL` | l'URL Turso |
-| `DATABASE_AUTH_TOKEN` | le jeton Turso |
-| `S3_ENDPOINT` | l'endpoint R2 |
-| `S3_BUCKET` | le nom du bucket |
-| `S3_ACCESS_KEY_ID` | la clé R2 |
-| `S3_SECRET_ACCESS_KEY` | le secret R2 |
-| `NEXT_PUBLIC_SITE_URL` | `https://votre-domaine.fr` |
+| `NEXT_PUBLIC_SITE_URL` | l'URL est déduite des en-têtes de la requête |
+| `S3_*` (4 variables) | les fichiers vont sur le disque du compte |
+| `DATABASE_URL` / `DATABASE_AUTH_TOKEN` | base locale dans `/home/<compte>/.kelvynlabs-data` |
+| `DOSSIER_DONNEES` | emplacement déduit de l'arborescence de l'hébergeur |
+
+Renseignez `NEXT_PUBLIC_SITE_URL` dès que le domaine définitif est connu : la
+déduction par en-têtes suffit au plan du site, mais un lien envoyé par courriel
+mérite une valeur fixe.
 
 Les variables Stripe s'ajoutent au même endroit le jour où vous vendez.
+
+### 3 bis. Vérifier le déploiement
+
+```bash
+curl -s https://votre-domaine.fr/api/sante
+```
+
+`{"statut":"ok"}` et le champ `persistance` vous disent en une ligne si le site
+fonctionne et si vos données survivront à la prochaine mise en ligne.
 
 ### 4. Créer le compte administrateur
 

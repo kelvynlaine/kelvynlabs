@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { donneesHorsRepertoireDeploiement } from "@/lib/chemins";
 import { db } from "@/lib/db";
 import { admins } from "@/lib/db/schema";
 import { stripeEstConfigure } from "@/lib/env.server";
@@ -25,6 +26,7 @@ export async function GET() {
   const diagnostic = {
     base: "inconnu" as string,
     stockage: "inconnu" as string,
+    persistance: "inconnu" as string,
     paiement: stripeEstConfigure() ? "configuré" : "non configuré",
   };
 
@@ -32,6 +34,23 @@ export async function GET() {
     diagnostic.stockage = nomStockage() === "s3" ? "objet (S3)" : "disque local";
   } catch {
     diagnostic.stockage = "indéterminé";
+  }
+
+  /*
+   * La seule question qui compte après un déploiement : ce que j'ai saisi
+   * sera-t-il encore là après le prochain ? On y répond sans divulguer le
+   * moindre chemin — l'emplacement exact n'a pas à être public.
+   */
+  try {
+    if (process.env.DATABASE_URL?.trim()) {
+      diagnostic.persistance = "base distante";
+    } else {
+      diagnostic.persistance = donneesHorsRepertoireDeploiement()
+        ? "hors du répertoire de déploiement (survit aux mises en ligne)"
+        : "DANS le répertoire de déploiement (effacé à chaque mise en ligne)";
+    }
+  } catch {
+    diagnostic.persistance = "indéterminé";
   }
 
   try {
@@ -59,8 +78,12 @@ export async function GET() {
     // gagner beaucoup de temps.
     const schemaManquant = /no such table|does not exist|SQLITE_UNKNOWN/i.test(message);
 
+    // Depuis que l'application applique ses migrations elle-même à la première
+    // requête, un schéma absent ne signifie plus « migrations oubliées » mais
+    // « migrations refusées » — typiquement un dossier de données non
+    // inscriptible. La distinction change entièrement où l'on doit chercher.
     diagnostic.base = schemaManquant
-      ? "connectée, mais SCHÉMA ABSENT — les migrations n'ont pas été appliquées"
+      ? "connectée, mais SCHÉMA ABSENT — la migration automatique a échoué"
       : "INJOIGNABLE — vérifiez DATABASE_URL et DATABASE_AUTH_TOKEN";
 
     console.error("[sante] base indisponible :", message);
@@ -70,7 +93,7 @@ export async function GET() {
         statut: "degrade",
         ...diagnostic,
         correction: schemaManquant
-          ? "Relancez le déploiement : les migrations s'appliquent pendant le build (npm run build)."
+          ? "Vérifiez que le dossier de données est inscriptible (DOSSIER_DONNEES)."
           : "Vérifiez les variables d'environnement de la base dans votre hébergeur.",
       },
       { status: 503 },

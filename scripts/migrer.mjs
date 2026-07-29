@@ -33,10 +33,13 @@ import { migrate } from "drizzle-orm/libsql/migrator";
  * impossible plutôt que documenter.
  */
 function disqueProbablementEphemere() {
+  // Un hébergement mutualisé n'est éphémère qu'en APPARENCE : le sous-arbre du
+  // site est remplacé à chaque mise en ligne, mais le dossier du compte
+  // survit. Dès qu'on en détecte un, les données y sont placées et il n'y a
+  // plus rien à craindre.
+  if (racineCompteMutualise()) return false;
+
   const indices = [
-    // Hostinger Node.js managé reconstruit dans .builds/source/repository
-    process.cwd().includes("/.builds/"),
-    // Plateformes managées courantes
     Boolean(process.env.VERCEL),
     Boolean(process.env.NETLIFY),
     Boolean(process.env.RENDER),
@@ -44,6 +47,29 @@ function disqueProbablementEphemere() {
   ];
 
   return indices.some(Boolean);
+}
+
+/**
+ * ⚠️ Doit rester identique à `racineCompteMutualise()` dans `lib/chemins.ts`.
+ * Le script tourne en JavaScript brut, hors du graphe de modules de
+ * l'application : il ne peut pas importer la version TypeScript. Si l'une des
+ * deux change, changez l'autre — sinon le script migrerait un fichier que le
+ * serveur n'ouvre pas.
+ */
+function racineCompteMutualise() {
+  const correspondance = /^(\/home\/[^/]+)\/domains\//.exec(process.cwd());
+  return correspondance?.[1] ?? null;
+}
+
+/** ⚠️ Doit rester identique à `dossierDonnees()` dans `lib/chemins.ts`. */
+function dossierDonnees() {
+  const configure = process.env.DOSSIER_DONNEES?.trim();
+  if (configure) return resolve(configure);
+
+  const compte = racineCompteMutualise();
+  if (compte) return join(compte, ".kelvynlabs-data");
+
+  return resolve(".data");
 }
 
 function configuration() {
@@ -85,8 +111,7 @@ function configuration() {
     process.exit(1);
   }
 
-  const dossier = resolve(process.env.DOSSIER_DONNEES?.trim() || ".data");
-  const chemin = join(dossier, "kelvynlabs.db");
+  const chemin = join(dossierDonnees(), "kelvynlabs.db");
   mkdirSync(dirname(chemin), { recursive: true });
 
   return { url: `file:${chemin}`, description: `fichier local ${chemin}` };

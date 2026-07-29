@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 
-import { siteConfig } from "@/lib/site-config";
+import { urlSite } from "@/lib/url-site";
 
 /**
  * Directives pour les robots d'indexation.
@@ -11,13 +11,20 @@ import { siteConfig } from "@/lib/site-config";
  * recherche, et épargne au serveur l'exploration de contenus inutiles.
  * La protection réelle reste requireAdmin() et checkAccess().
  */
-export default function robots(): MetadataRoute.Robots {
+/**
+ * Rendu à la demande, et non à la compilation : l'URL du plan de site est
+ * déduite des en-têtes de la requête quand `NEXT_PUBLIC_SITE_URL` est absente.
+ * En statique, il n'y a pas de requête — le fichier annoncerait `localhost`.
+ */
+export const dynamic = "force-dynamic";
+
+export default async function robots(): Promise<MetadataRoute.Robots> {
   return {
     rules: {
       userAgent: "*",
       allow: "/",
       disallow: ["/admin", "/api"],
     },
-    sitemap: `${siteConfig.url}/sitemap.xml`,
+    sitemap: `${await urlSite()}/sitemap.xml`,
   };
 }

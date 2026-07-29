@@ -8,7 +8,7 @@ import { db } from "@/lib/db";
 import { formations } from "@/lib/db/schema";
 import { stripeEstConfigure } from "@/lib/env.server";
 import { aUnEnrollmentActif, getStudentCourant } from "@/lib/etudiant";
-import { siteConfig } from "@/lib/site-config";
+import { urlSite } from "@/lib/url-site";
 import { getStripe } from "@/lib/stripe";
 
 /**
@@ -46,7 +46,7 @@ export async function creerSessionPaiement(slug: string): Promise<EtatAction> {
     redirect(`/formations/${formation.slug}`);
   }
 
-  const base = siteConfig.url.replace(/\/$/, "");
+  const base = await urlSite();
 
   const session = await getStripe().checkout.sessions.create({
     mode: "payment",
