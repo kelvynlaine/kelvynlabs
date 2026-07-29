@@ -65,6 +65,19 @@ export default function RootLayout({
         className={`${inter.variable} ${instrumentSerif.variable} ${jetbrainsMono.variable} antialiased`}
       >
         <ThemeProvider>
+          {/*
+            Lien d'évitement : invisible tant qu'il n'a pas le focus, il
+            apparaît à la première tabulation. Sans lui, un utilisateur au
+            clavier doit traverser tout le sommaire d'une formation — plusieurs
+            dizaines de liens — avant d'atteindre le contenu de la leçon.
+          */}
+          <a
+            href="#contenu-principal"
+            className="bg-brand text-primary-foreground sr-only z-50 rounded-lg px-4 py-2 text-sm font-medium focus:not-sr-only focus:fixed focus:top-4 focus:left-4"
+          >
+            Aller au contenu principal
+          </a>
+
           {children}
           <Toaster position="top-center" richColors />
         </ThemeProvider>

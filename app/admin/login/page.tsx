@@ -41,7 +41,7 @@ export default async function PageConnexion({
     suivant?.startsWith("/") && !suivant.startsWith("//") ? suivant : "/admin";
 
   return (
-    <main className="relative flex min-h-dvh items-center justify-center overflow-hidden px-4 py-12">
+    <main id="contenu-principal" className="relative flex min-h-dvh items-center justify-center overflow-hidden px-4 py-12">
       {/* Halo violet diffus — signature visuelle de Kelvynlabs. */}
       <div
         aria-hidden

@@ -28,10 +28,28 @@ export default async function LayoutAdmin({
 }) {
   const admin = await requireAdmin();
 
+  // `labelCourt` sert à la barre mobile : à 375 px, « Tableau de bord » pousse
+  // « Médias » hors de l'écran et l'onglet devient invisible sans défilement
+  // horizontal — qui, sur une barre de navigation, ne se devine pas.
   const navigation = [
-    { href: "/admin", label: "Tableau de bord", icon: LayoutDashboard },
-    { href: "/admin/formations", label: "Formations", icon: BookOpen },
-    { href: "/admin/medias", label: "Médias", icon: LibraryBig },
+    {
+      href: "/admin",
+      label: "Tableau de bord",
+      labelCourt: "Accueil",
+      icon: LayoutDashboard,
+    },
+    {
+      href: "/admin/formations",
+      label: "Formations",
+      labelCourt: "Formations",
+      icon: BookOpen,
+    },
+    {
+      href: "/admin/medias",
+      label: "Médias",
+      labelCourt: "Médias",
+      icon: LibraryBig,
+    },
   ];
 
   return (
@@ -79,22 +97,23 @@ export default async function LayoutAdmin({
           </div>
         </div>
 
-        {/* Navigation repliée en barre horizontale scrollable sur mobile. */}
-        <nav className="border-border flex items-center gap-1 overflow-x-auto border-t px-4 py-2 md:hidden">
-          {navigation.map(({ href, label, icon: Icon }) => (
+        {/* Navigation repliée sur mobile : les trois onglets se partagent la
+            largeur, sans défilement horizontal ni onglet coupé. */}
+        <nav className="border-border grid grid-cols-3 border-t px-2 py-2 md:hidden">
+          {navigation.map(({ href, labelCourt, icon: Icon }) => (
             <Link
               key={href}
               href={href}
-              className="text-muted-foreground hover:text-foreground inline-flex shrink-0 items-center gap-2 rounded-lg px-3 py-1.5 text-sm"
+              className="text-muted-foreground hover:text-foreground hover:bg-secondary inline-flex items-center justify-center gap-2 rounded-lg px-2 py-1.5 text-sm transition-colors"
             >
-              <Icon className="size-4" />
-              {label}
+              <Icon className="size-4 shrink-0" />
+              <span className="truncate">{labelCourt}</span>
             </Link>
           ))}
         </nav>
       </header>
 
-      <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6">
+      <main id="contenu-principal" className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6">
         {children}
       </main>
     </div>

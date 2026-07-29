@@ -27,14 +27,25 @@ export function formaterDuree(minutes: number): string {
   return reste === 0 ? `${heures} h` : `${heures} h ${String(reste).padStart(2, "0")}`;
 }
 
-export function CarteFormation({ formation }: { formation: FormationCatalogue }) {
+export function CarteFormation({
+  formation,
+  index = 0,
+}: {
+  formation: FormationCatalogue;
+  index?: number;
+}) {
   const commencee = formation.pourcentage !== null && formation.pourcentage > 0;
 
   return (
-    <li>
+    <li
+      className="apparition"
+      // Décalage en cascade, plafonné : au-delà de six cartes, attendre une
+      // seconde avant de voir la dernière serait pénible plutôt qu'élégant.
+      style={{ "--delai": `${Math.min(index, 5) * 60}ms` } as React.CSSProperties}
+    >
       <Link
         href={`/formations/${formation.slug}`}
-        className="group border-border bg-card hover:border-brand-vivid/50 focus-visible:border-brand-vivid flex h-full flex-col overflow-hidden rounded-2xl border transition-colors"
+        className="group border-border bg-card hover:border-brand-vivid/50 focus-visible:border-brand-vivid hover:glow-brand flex h-full flex-col overflow-hidden rounded-2xl border transition-[color,background-color,border-color,box-shadow] duration-300"
       >
         <div className="bg-secondary relative aspect-[16/9] overflow-hidden">
           {formation.imageCouverture ? (

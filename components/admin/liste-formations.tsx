@@ -167,7 +167,9 @@ function LigneFormation({ formation }: { formation: FormationListee }) {
         href={`/admin/formations/${formation.id}`}
         className="min-w-0 flex-1 py-1"
       >
-        <p className="truncate font-medium">{formation.titre}</p>
+        {/* Sur deux lignes plutôt que tronqué : à 375 px, une troncature dure
+            réduit certains titres à trois mots, ce qui les rend indistincts. */}
+        <p className="line-clamp-2 font-medium sm:truncate">{formation.titre}</p>
         <p className="text-muted-foreground mt-0.5 truncate text-xs">
           /{formation.slug} · {formation.nbLecons} leçon
           {formation.nbLecons > 1 ? "s" : ""}

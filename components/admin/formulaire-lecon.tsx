@@ -5,7 +5,7 @@ import { useActionState, useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { majLecon } from "@/app/admin/(protege)/formations/[id]/actions";
-import { EditeurTiptap } from "@/components/editeur/editeur-tiptap";
+import { EditeurTiptap } from "@/components/editeur/editeur-differe";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";

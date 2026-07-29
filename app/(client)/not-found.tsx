@@ -16,7 +16,7 @@ export default function Introuvable() {
     <>
       <EnteteSite />
 
-      <main className="mx-auto flex w-full max-w-lg flex-col items-center px-4 py-28 text-center sm:px-6">
+      <main id="contenu-principal" className="mx-auto flex w-full max-w-lg flex-col items-center px-4 py-28 text-center sm:px-6">
         <Compass className="text-brand-text size-10" />
         <h1 className="mt-6 text-4xl">Page introuvable</h1>
         <p className="text-muted-foreground mt-3 leading-relaxed">

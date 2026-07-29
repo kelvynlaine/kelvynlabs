@@ -3,7 +3,7 @@
 Plateforme de formations en ligne mono-créateur : un espace d'administration
 pour rédiger et structurer les formations, un espace client pour les consulter.
 
-**État : Phases 1 à 3 terminées.** Voir la [Roadmap](#roadmap).
+**État : Phases 1 à 4 terminées.** Voir la [Roadmap](#roadmap).
 
 ---
 
@@ -294,6 +294,42 @@ Le mode aperçu découle de la même fonction : l'admin voit les brouillons parc
 que `checkAccess()` le lui accorde explicitement, pas parce que la page
 contourne la règle.
 
+### Finitions (Phase 4)
+
+Quelques décisions non évidentes prises pendant la passe de polissage :
+
+- **La connexion SQLite s'ouvre paresseusement.** Elle l'était auparavant à
+  l'import du module, ce qui faisait échouer `next build` sur `SQLITE_BUSY` :
+  Next évalue l'arbre des modules dans plusieurs workers parallèles, qui
+  réclamaient tous le même fichier. Désormais le build n'ouvre plus la base du
+  tout, et ne crée plus le fichier par erreur au moment de compiler.
+- **L'éditeur Tiptap est chargé à la demande.** Il représentait à lui seul un
+  tiers du JavaScript de la page d'édition d'une leçon, retardant
+  l'interactivité de champs qui n'en ont pas besoin. La page est passée de
+  385 kB à 257 kB, et le titre ou le bouton d'enregistrement répondent
+  immédiatement.
+- **Des squelettes plutôt qu'une page blanche.** Toutes les pages sont rendues
+  à la demande ; chaque segment a désormais son `loading.tsx`, calé sur la
+  géométrie du contenu réel pour qu'aucun élément ne saute à l'arrivée des
+  données.
+- **Le site public n'affiche jamais `error.message`.** En production, Next
+  masque déjà les messages serveur derrière un identifiant : les réafficher
+  annulerait cette protection. L'administration, elle, les montre — savoir
+  « base verrouillée » évite un aller-retour dans les logs.
+- **Lien d'évitement.** Sans lui, un utilisateur au clavier devait traverser
+  tout le sommaire d'une formation — plusieurs dizaines de liens — avant
+  d'atteindre le contenu d'une leçon.
+- **Image de partage générée par formation.** Contrainte du moteur de rendu :
+  tout `<div>` à plusieurs enfants doit déclarer `display: flex`, et
+  `{n} leçon{n > 1 ? "s" : ""}` compte pour trois enfants. Déclarer
+  `openGraph.images` dans `generateMetadata`, même à `undefined`, désactive
+  par ailleurs la convention de fichier — la page se retrouve alors sans
+  aucune vignette.
+- **Le plan du site s'appuie sur `listerFormationsVisibles()`**, la même
+  fonction que le catalogue : une formation dépubliée en disparaît
+  automatiquement. Une requête indépendante finirait par exposer des
+  brouillons le jour où la règle de visibilité évoluerait.
+
 ### Sécurité — décisions structurantes
 
 - **Mots de passe** : scrypt, N=2^16 r=8 p=2 (configuration recommandée par
@@ -379,7 +415,7 @@ production.
 | **1 — Fondations** | Next.js, Tailwind, shadcn/ui, schéma, auth, `checkAccess()` | ✅ Terminée |
 | **2 — CMS Admin** | CRUD formations/chapitres/leçons, Tiptap, uploads, glisser-déposer, bibliothèque, aperçu | ✅ Terminée |
 | **3 — Espace client** | Catalogue, page formation, lecteur de leçon, progression anonyme par cookie | ✅ Terminée |
-| **4 — Polish UI/UX** | Design system finalisé, animations, responsive complet | ⏳ |
+| **4 — Polish UI/UX** | États de chargement et d'erreur, accessibilité, performance, SEO, finitions responsive | ✅ Terminée |
 | **5 — Préparation Stripe** | Branchement de `checkAccess()`, page « Achat à venir » — *structure uniquement* | ⏳ |
 
 L'intégration réelle de Stripe fera l'objet d'une session dédiée.

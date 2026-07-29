@@ -32,9 +32,13 @@ export async function generateMetadata({
     title: formation.titre,
     description: formation.descriptionCourte ?? siteConfig.description,
     openGraph: {
+      type: "article",
       title: formation.titre,
       description: formation.descriptionCourte ?? siteConfig.description,
-      images: formation.imageCouverture ? [formation.imageCouverture] : undefined,
+      // ⚠️ Pas de champ `images` ici : le renseigner — même à `undefined` —
+      // désactive la convention de fichier `opengraph-image.tsx`, et la page
+      // se retrouve alors sans aucune vignette de partage. On laisse donc Next
+      // rattacher l'image générée tout seul.
     },
     // Un brouillon consulté par l'admin ne doit jamais entrer dans un index.
     robots:
@@ -76,7 +80,7 @@ export default async function PageFormation({
     <>
       <EnteteSite />
 
-      <main className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 sm:py-14">
+      <main id="contenu-principal" className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 sm:py-14">
         {apercuAdmin ? (
           <BandeauApercu
             lienEdition={`/admin/formations/${formation.id}`}

@@ -28,7 +28,7 @@ export default async function PageInstallation() {
   if ((await compterAdmins()) > 0) redirect("/admin/login");
 
   return (
-    <main className="relative flex min-h-dvh items-center justify-center overflow-hidden px-4 py-12">
+    <main id="contenu-principal" className="relative flex min-h-dvh items-center justify-center overflow-hidden px-4 py-12">
       <div
         aria-hidden
         className="bg-brand-vivid/20 pointer-events-none absolute top-[-20%] left-1/2 size-[36rem] -translate-x-1/2 rounded-full blur-[120px]"

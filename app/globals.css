@@ -297,24 +297,56 @@
   }
 }
 
-@layer utilities {
-  /* Lueur violette discrète, utilisée sur les cartes de formation au survol
-     et sur les éléments actifs de la sidebar. */
-  .glow-brand {
-    box-shadow: 0 0 0 1px color-mix(in oklab, var(--brand-vivid) 35%, transparent),
-      0 8px 32px -8px color-mix(in oklab, var(--brand-vivid) 45%, transparent);
-  }
+/* -------------------------------------------------------------------------
+   UTILITAIRES PROPRES AU PROJET
+   -------------------------------------------------------------------------
+   Déclarés avec `@utility` et non dans `@layer utilities` : c'est ce qui
+   permet de les combiner avec les variantes Tailwind (`hover:glow-brand`).
+   Une simple classe dans une couche ne serait utilisable que telle quelle.
+   ------------------------------------------------------------------------- */
 
-  /* Dégradé de texte pour les titres de section marquants. */
-  .text-gradient-brand {
-    background-image: linear-gradient(
-      100deg,
-      var(--foreground) 20%,
-      var(--brand-text) 100%
-    );
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
+/* Lueur violette discrète, au survol des cartes de formation. */
+@utility glow-brand {
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, var(--brand-vivid) 30%, transparent),
+    0 12px 40px -12px color-mix(in oklab, var(--brand-vivid) 55%, transparent);
+}
+
+/* Dégradé de texte pour les titres marquants. */
+@utility text-gradient-brand {
+  background-image: linear-gradient(
+    100deg,
+    var(--foreground) 20%,
+    var(--brand-text) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/*
+  Apparition à l'arrivée du contenu.
+
+  Volontairement courte et de faible amplitude : sur un catalogue, une
+  animation trop marquée donne l'impression que la page rame. Le décalage
+  entre les cartes se règle par `--delai`, posé en style en ligne.
+
+  `both` conserve l'état initial avant le départ : sans lui, une carte au délai
+  élevé s'afficherait pleinement puis disparaîtrait pour réapparaître.
+*/
+@utility apparition {
+  animation: apparition 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: var(--delai, 0ms);
+}
+
+@keyframes apparition {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
   }
 }
 

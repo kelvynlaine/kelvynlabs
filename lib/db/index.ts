@@ -9,15 +9,24 @@ import { drizzle } from "drizzle-orm/better-sqlite3";
 import { cheminBaseDeDonnees } from "@/lib/chemins";
 import * as schema from "@/lib/db/schema";
 
+type Connexion = ReturnType<typeof creerConnexion>;
+
 /**
- * Connexion SQLite unique pour tout le processus.
+ * Connexion SQLite unique pour tout le processus, ouverte PARESSEUSEMENT.
  *
- * En développement, Next.js recharge les modules à chaque modification : sans
- * le cache sur `globalThis`, chaque rechargement ouvrirait une nouvelle
- * connexion et on épuiserait les descripteurs de fichiers en quelques minutes.
+ * ⚠️ L'ouverture ne doit surtout pas avoir lieu à l'import du module. Pendant
+ * `next build`, Next évalue l'arbre des modules dans plusieurs workers en
+ * parallèle pour collecter les données de pages : une ouverture au niveau du
+ * module faisait alors échouer le build sur SQLITE_BUSY, plusieurs processus
+ * réclamant le même fichier en même temps.
+ *
+ * Avec le proxy ci-dessous, la connexion n'est créée qu'à la PREMIÈRE requête
+ * réelle — donc à l'exécution, dans un seul processus. Le build n'ouvre plus
+ * la base du tout, et le fichier n'est pas créé par erreur au moment de
+ * compiler.
  */
 const cacheGlobal = globalThis as unknown as {
-  __kelvynlabsDb?: ReturnType<typeof creerConnexion>;
+  __kelvynlabsDb?: Connexion;
 };
 
 function creerConnexion() {
@@ -44,6 +53,29 @@ function creerConnexion() {
   return drizzle(sqlite, { schema });
 }
 
-export const db = (cacheGlobal.__kelvynlabsDb ??= creerConnexion());
+/**
+ * Connexion réelle. En développement, Next recharge les modules à chaque
+ * modification : le cache sur `globalThis` évite d'ouvrir une connexion de
+ * plus à chaque rechargement et d'épuiser les descripteurs de fichiers.
+ */
+export function getDb(): Connexion {
+  return (cacheGlobal.__kelvynlabsDb ??= creerConnexion());
+}
+
+/**
+ * `db` se manipule comme l'objet Drizzle habituel — `db.query.…`,
+ * `db.insert(…)` — mais chaque accès traverse ce proxy, qui ouvre la connexion
+ * au dernier moment.
+ *
+ * Les fonctions sont liées à la connexion réelle : sans ce `bind`, `this`
+ * pointerait sur le proxy et les méthodes internes de Drizzle échoueraient.
+ */
+export const db = new Proxy({} as Connexion, {
+  get(_cible, propriete) {
+    const connexion = getDb();
+    const valeur = connexion[propriete as keyof Connexion];
+    return typeof valeur === "function" ? valeur.bind(connexion) : valeur;
+  },
+}) as Connexion;
 
 export { schema };

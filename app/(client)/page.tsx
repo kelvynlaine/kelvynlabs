@@ -46,7 +46,7 @@ export default async function PageCatalogue() {
     <>
       <EnteteSite />
 
-      <main className="relative overflow-hidden">
+      <main id="contenu-principal" className="relative overflow-hidden">
         <div
           aria-hidden
           className="bg-brand-vivid/12 pointer-events-none absolute top-[-28rem] left-1/2 size-[44rem] -translate-x-1/2 rounded-full blur-[140px]"
@@ -80,9 +80,10 @@ export default async function PageCatalogue() {
             </div>
           ) : (
             <ul className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {cartes.map((formation) => (
+              {cartes.map((formation, index) => (
                 <CarteFormation
                   key={formation.slug}
+                  index={index}
                   formation={{
                     ...formation,
                     // Les couvertures sont stockées comme URL complète par

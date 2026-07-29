@@ -129,7 +129,7 @@ export default async function PageLecon({
           </aside>
 
           {/* --- Leçon ------------------------------------------------------ */}
-          <main className="min-w-0">
+          <main id="contenu-principal" className="min-w-0">
             <VueLecon lecon={lecon} ressources={ressources} cdnBunny={cdnBunny} />
 
             <div className="border-border mt-12 border-t pt-8">
