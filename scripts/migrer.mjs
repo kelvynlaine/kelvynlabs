@@ -93,6 +93,23 @@ function configuration() {
 }
 
 async function principal() {
+  /*
+   * Mode « optionnel », utilisé pendant le BUILD.
+   *
+   * Beaucoup d'hébergements managés lancent leur propre commande de démarrage
+   * et court-circuitent `npm start` — donc ce script. Le lancer aussi pendant
+   * le build garantit que les migrations s'appliquent au moins une fois, tant
+   * que la base est distante (donc joignable à ce moment-là).
+   *
+   * En l'absence de DATABASE_URL, on ne fait rien : au build, la base locale
+   * n'est pas celle qui servira à l'exécution. C'est `npm start` qui prendra
+   * le relais, garde-fou compris.
+   */
+  if (process.argv.includes("--optionnel") && !process.env.DATABASE_URL?.trim()) {
+    console.log("→ Migrations ignorées (pas de base distante configurée)");
+    return;
+  }
+
   const dossierMigrations = join(process.cwd(), "drizzle");
 
   if (!existsSync(dossierMigrations)) {

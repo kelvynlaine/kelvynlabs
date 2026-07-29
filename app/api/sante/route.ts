@@ -2,23 +2,78 @@ import { NextResponse } from "next/server";
 
 import { db } from "@/lib/db";
 import { admins } from "@/lib/db/schema";
+import { stripeEstConfigure } from "@/lib/env.server";
+import { nomStockage } from "@/lib/stockage";
 
 /**
- * Sonde de santé, utilisée par le HEALTHCHECK Docker.
+ * Sonde de santé, utilisée par le HEALTHCHECK Docker et par vous en cas de
+ * doute après un déploiement.
  *
- * Elle interroge réellement la base : un serveur qui répond mais dont le
- * fichier SQLite est illisible (volume non monté, permissions) est un serveur
- * en panne, même s'il renvoie du HTML.
+ * Elle interroge RÉELLEMENT la base : un serveur qui répond mais dont la base
+ * est inaccessible est un serveur en panne, même s'il renvoie du HTML.
  *
- * Ne divulgue rien : ni version, ni chemin, ni compte.
+ * Quand quelque chose ne va pas, elle dit QUOI. Un « degrade » sans explication
+ * oblige à fouiller les logs de l'hébergeur — souvent les moins accessibles au
+ * moment où l'on en a besoin.
+ *
+ * ⚠️ Elle ne divulgue jamais d'URL, de jeton ni de chemin : seulement la
+ * nature du problème et le geste qui le corrige.
  */
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  const diagnostic = {
+    base: "inconnu" as string,
+    stockage: "inconnu" as string,
+    paiement: stripeEstConfigure() ? "configuré" : "non configuré",
+  };
+
+  try {
+    diagnostic.stockage = nomStockage() === "s3" ? "objet (S3)" : "disque local";
+  } catch {
+    diagnostic.stockage = "indéterminé";
+  }
+
   try {
     await db.select({ id: admins.id }).from(admins).limit(1);
-    return NextResponse.json({ statut: "ok" });
-  } catch {
-    return NextResponse.json({ statut: "degrade" }, { status: 503 });
+    diagnostic.base = "ok";
+
+    return NextResponse.json({ statut: "ok", ...diagnostic });
+  } catch (erreur) {
+    // ⚠️ Drizzle enveloppe l'erreur du driver : son `message` ne dit que
+    // « Failed query: … ». Le motif réel — « no such table » — n'apparaît que
+    // dans `cause`. Ne regarder que le message classait donc tout schéma
+    // manquant en panne de connexion, et envoyait chercher au mauvais endroit.
+    const messages: string[] = [];
+    let courante: unknown = erreur;
+
+    for (let i = 0; i < 5 && courante instanceof Error; i++) {
+      messages.push(courante.message);
+      courante = courante.cause;
+    }
+
+    const message = messages.join(" | ") || String(erreur);
+
+    // Base joignable mais schéma absent : symptôme d'un déploiement dont les
+    // migrations n'ont pas tourné. Le distinguer d'une panne de connexion fait
+    // gagner beaucoup de temps.
+    const schemaManquant = /no such table|does not exist|SQLITE_UNKNOWN/i.test(message);
+
+    diagnostic.base = schemaManquant
+      ? "connectée, mais SCHÉMA ABSENT — les migrations n'ont pas été appliquées"
+      : "INJOIGNABLE — vérifiez DATABASE_URL et DATABASE_AUTH_TOKEN";
+
+    console.error("[sante] base indisponible :", message);
+
+    return NextResponse.json(
+      {
+        statut: "degrade",
+        ...diagnostic,
+        correction: schemaManquant
+          ? "Relancez le déploiement : les migrations s'appliquent pendant le build (npm run build)."
+          : "Vérifiez les variables d'environnement de la base dans votre hébergeur.",
+      },
+      { status: 503 },
+    );
   }
 }
