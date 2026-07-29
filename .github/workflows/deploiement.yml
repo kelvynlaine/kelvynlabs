@@ -1,0 +1,62 @@
+name: Vérification et déploiement
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Un seul déploiement à la fois : deux `docker compose up` concurrents sur la
+# même machine se marcheraient dessus.
+concurrency:
+  group: deploiement-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verification:
+    name: Lint, types et build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run build
+
+  deploiement:
+    name: Déploiement sur le VPS
+    # Ne déploie que depuis main, et seulement si la vérification est passée.
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: verification
+    runs-on: ubuntu-latest
+    steps:
+      - name: Connexion SSH et mise à jour
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOTE }}
+          username: ${{ secrets.VPS_UTILISATEUR }}
+          key: ${{ secrets.VPS_CLE_SSH }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          script: |
+            set -euo pipefail
+            cd /opt/kelvynlabs
+
+            # Sauvegarde AVANT de toucher au code : c'est le seul moment où
+            # revenir en arrière est encore simple.
+            ./scripts/sauvegarde.sh /opt/sauvegardes || true
+
+            git fetch --all
+            git reset --hard origin/main
+
+            # --build reconstruit l'image ; le volume `donnees` n'est pas touché.
+            docker compose up -d --build
+
+            # Retire les images intermédiaires, sinon le disque du VPS se
+            # remplit au fil des déploiements.
+            docker image prune -f

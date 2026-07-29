@@ -17,8 +17,29 @@ const eslintConfig = [
       ".next/**",
       "out/**",
       "build/**",
+      ".data/**",
+      "drizzle/**",
       "next-env.d.ts",
     ],
+  },
+  {
+    rules: {
+      /*
+       * Convention du projet : un identifiant préfixé par `_` est
+       * intentionnellement inutilisé. Le cas courant ici est le retrait d'une
+       * clé par déstructuration (`const { lecon: _lecon, ...reste } = ligne`),
+       * qui est la façon la plus lisible d'exclure un champ d'un objet.
+       */
+      "@typescript-eslint/no-unused-vars": [
+        "warn",
+        {
+          argsIgnorePattern: "^_",
+          varsIgnorePattern: "^_",
+          caughtErrorsIgnorePattern: "^_",
+          ignoreRestSiblings: true,
+        },
+      ],
+    },
   },
 ];
 

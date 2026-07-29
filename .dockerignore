@@ -1,0 +1,19 @@
+# Ne jamais copier dans l'image :
+node_modules
+.next
+.git
+.github
+.claude
+
+# ⚠️ Données et secrets — leur présence dans l'image serait une fuite.
+.data
+.env
+.env.local
+.env.*.local
+
+# Bruit
+*.log
+.DS_Store
+README.md
+deploy
+scripts/sauvegarde.sh

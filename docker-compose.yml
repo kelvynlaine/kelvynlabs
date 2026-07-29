@@ -1,0 +1,40 @@
+# =============================================================================
+# Kelvynlabs — déploiement sur VPS
+# =============================================================================
+#   docker compose up -d --build
+#
+# ⚠️ Le volume `donnees` est ce qui distingue un redéploiement d'une perte de
+# données. Il contient la base SQLite ET les fichiers uploadés. Ne le supprimez
+# jamais avec `docker compose down -v` : le `-v` détruit les volumes.
+# =============================================================================
+
+services:
+  app:
+    build: .
+    restart: unless-stopped
+
+    # N'écoute que sur la boucle locale : c'est Nginx, en frontal, qui expose
+    # le service au monde avec TLS. Sans le préfixe 127.0.0.1, Docker ouvrirait
+    # le port 3000 sur l'IP publique en contournant le pare-feu.
+    ports:
+      - "127.0.0.1:3000:3000"
+
+    volumes:
+      - donnees:/data
+
+    environment:
+      DOSSIER_DONNEES: /data
+      NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-http://localhost:3000}
+      VIDEO_PROVIDER_DEFAULT: ${VIDEO_PROVIDER_DEFAULT:-youtube}
+      # Décommentez le jour où vous passez à Bunny.
+      # BUNNY_STREAM_LIBRARY_ID: ${BUNNY_STREAM_LIBRARY_ID}
+      # BUNNY_STREAM_API_KEY: ${BUNNY_STREAM_API_KEY}
+      # BUNNY_STREAM_CDN_HOSTNAME: ${BUNNY_STREAM_CDN_HOSTNAME}
+
+    # SQLite ne tolère pas plusieurs processus écrivains sur des machines
+    # différentes : une seule instance, toujours.
+    deploy:
+      replicas: 1
+
+volumes:
+  donnees:

@@ -1,0 +1,27 @@
+"use client";
+
+import { ThemeProvider as NextThemesProvider } from "next-themes";
+import type { ComponentProps } from "react";
+
+/**
+ * Fournisseur de thème global.
+ *
+ * Kelvynlabs est pensé « sombre premium » : le mode sombre est le défaut,
+ * mais l'utilisateur peut basculer en clair et son choix est mémorisé.
+ */
+export function ThemeProvider({
+  children,
+  ...props
+}: ComponentProps<typeof NextThemesProvider>) {
+  return (
+    <NextThemesProvider
+      attribute="class"
+      defaultTheme="dark"
+      enableSystem
+      disableTransitionOnChange
+      {...props}
+    >
+      {children}
+    </NextThemesProvider>
+  );
+}

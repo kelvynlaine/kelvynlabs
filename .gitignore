@@ -32,6 +32,21 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# ...mais .env.example DOIT être versionné : c'est la documentation des
+# variables disponibles. Sans cette exception, `.env*` l'exclurait aussi.
+!.env.example
+
+# Données persistantes : base SQLite et fichiers uploadés.
+# ⚠️ Ne jamais versionner — contient les contenus et les empreintes de mots
+# de passe.
+/.data/
+
+# Sauvegardes produites par scripts/sauvegarde.sh
+/sauvegardes/
+
+# Réglages Claude Code propres à une machine (autorisations locales).
+# .claude/launch.json, lui, est versionné : il décrit comment lancer le projet.
+.claude/settings.local.json
 
 # vercel
 .vercel

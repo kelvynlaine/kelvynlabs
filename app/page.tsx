@@ -1,103 +1,124 @@
-import Image from "next/image";
+import Link from "next/link";
+import { ArrowRight, Lock } from "lucide-react";
 
-export default function Home() {
+import { Logo } from "@/components/logo";
+import { ThemeToggle } from "@/components/theme-toggle";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { siteConfig } from "@/lib/site-config";
+
+/**
+ * Page d'accueil publique — provisoire.
+ *
+ * En Phase 3 elle deviendra le catalogue des formations, alimenté par
+ * `listerFormationsVisibles()` (lib/access.ts). Elle sert pour l'instant à
+ * valider le design system : palette, typographie et bascule clair/sombre.
+ */
+
+const ECHANTILLONS = [
+  { nom: "Fond", classe: "bg-background border-border border" },
+  { nom: "Surface", classe: "bg-card border-border border" },
+  { nom: "Surface haute", classe: "bg-secondary" },
+  { nom: "Marque", classe: "bg-brand" },
+  { nom: "Marque vive", classe: "bg-brand-vivid" },
+  { nom: "Halo", classe: "bg-brand-subtle" },
+  { nom: "Succès", classe: "bg-success" },
+  { nom: "Alerte", classe: "bg-warning" },
+  { nom: "Erreur", classe: "bg-destructive" },
+];
+
+export default function PageAccueil() {
   return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+    <div className="relative min-h-dvh overflow-hidden">
+      <div
+        aria-hidden
+        className="bg-brand-vivid/15 pointer-events-none absolute top-[-30%] left-1/2 size-[46rem] -translate-x-1/2 rounded-full blur-[140px]"
+      />
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+      <header className="relative mx-auto flex h-16 w-full max-w-5xl items-center justify-between px-4 sm:px-6">
+        <Logo />
+        <div className="flex items-center gap-1">
+          <ThemeToggle />
+          <Button variant="ghost" size="sm" asChild>
+            <Link href="/admin">
+              <Lock className="size-3.5" />
+              Admin
+            </Link>
+          </Button>
         </div>
+      </header>
+
+      <main className="relative mx-auto w-full max-w-5xl px-4 pt-16 pb-24 sm:px-6 sm:pt-24">
+        <Badge variant="secondary" className="mb-6">
+          Phase 1 · Fondations
+        </Badge>
+
+        <h1 className="max-w-2xl text-5xl leading-[1.05] sm:text-6xl">
+          <span className="text-gradient-brand">Apprendre sans bruit.</span>
+        </h1>
+
+        <p className="text-muted-foreground mt-6 max-w-xl text-lg leading-relaxed">
+          {siteConfig.description}
+        </p>
+
+        <div className="mt-10 flex flex-wrap gap-3">
+          <Button size="lg" disabled>
+            Voir les formations
+            <ArrowRight className="size-4" />
+          </Button>
+          <Button size="lg" variant="outline" asChild>
+            <Link href="/admin">Espace administrateur</Link>
+          </Button>
+        </div>
+
+        <p className="text-muted-foreground mt-4 text-sm">
+          Le catalogue arrive en Phase 3. Cette page valide pour l&apos;instant
+          le design system.
+        </p>
+
+        {/* ---- Aperçu du design system --------------------------------- */}
+        <section className="border-border mt-24 border-t pt-12">
+          <h2 className="text-2xl">Design system</h2>
+          <p className="text-muted-foreground mt-2 text-sm">
+            Basculez entre les thèmes clair et sombre pour vérifier les deux
+            rendus.
+          </p>
+
+          <div className="mt-8 grid grid-cols-3 gap-4 sm:grid-cols-5">
+            {ECHANTILLONS.map(({ nom, classe }) => (
+              <div key={nom} className="space-y-2">
+                <div className={`h-16 rounded-xl ${classe}`} />
+                <p className="text-muted-foreground text-xs">{nom}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="border-border mt-12 grid gap-8 border-t pt-8 sm:grid-cols-2">
+            <div>
+              <p className="text-muted-foreground mb-3 text-xs tracking-widest uppercase">
+                Titres · Instrument Serif
+              </p>
+              <p className="font-heading text-4xl">Formations en ligne</p>
+              <p className="font-heading text-muted-foreground mt-2 text-2xl">
+                Structurées et actionnables
+              </p>
+            </div>
+            <div>
+              <p className="text-muted-foreground mb-3 text-xs tracking-widest uppercase">
+                Corps · Inter
+              </p>
+              <p className="leading-relaxed">
+                Le corps de texte reste en Inter pour la lisibilité sur de
+                longues leçons, tandis que les titres portent la signature
+                sérif de la marque.
+              </p>
+              <p className="text-muted-foreground mt-3 font-mono text-sm">
+                const contenu = &quot;JetBrains Mono&quot;;
+              </p>
+            </div>
+          </div>
+        </section>
       </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
     </div>
   );
 }
