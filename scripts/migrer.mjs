@@ -101,13 +101,44 @@ async function principal() {
    * le build garantit que les migrations s'appliquent au moins une fois, tant
    * que la base est distante (donc joignable à ce moment-là).
    *
-   * En l'absence de DATABASE_URL, on ne fait rien : au build, la base locale
-   * n'est pas celle qui servira à l'exécution. C'est `npm start` qui prendra
-   * le relais, garde-fou compris.
+   * Sur un build LOCAL sans base distante, on ne fait rien : la base locale
+   * n'est pas celle qui servira à l'exécution, et `npm start` prendra le
+   * relais avec son garde-fou.
+   *
+   * Sur un hébergement éphémère, en revanche, il faut échouer ICI. Le
+   * garde-fou de `configuration()` ne protège que `npm start` — jamais
+   * exécuté quand la plateforme impose sa propre commande de démarrage. Sans
+   * cet arrêt, le déploiement « réussit » et met en ligne un site dont chaque
+   * page d'administration renvoie 500, ce qui est le pire des retours : vert
+   * côté hébergeur, cassé côté visiteur.
    */
   if (process.argv.includes("--optionnel") && !process.env.DATABASE_URL?.trim()) {
-    console.log("→ Migrations ignorées (pas de base distante configurée)");
-    return;
+    if (!disqueProbablementEphemere() || process.env.AUTORISER_BASE_EPHEMERE === "1") {
+      console.log("→ Migrations ignorées (pas de base distante configurée)");
+      return;
+    }
+
+    console.error(
+      [
+        "",
+        "✗ BUILD INTERROMPU — DATABASE_URL manquante",
+        "",
+        "  Cet hébergement recrée le disque à chaque déploiement. Sans base",
+        "  distante, l'application démarrerait sur un fichier SQLite vide :",
+        "  l'accueil s'afficherait, mais /admin renverrait 500 et le moindre",
+        "  contenu saisi disparaîtrait au déploiement suivant.",
+        "",
+        "  Renseignez dans les variables d'environnement de votre hébergeur :",
+        "",
+        "      DATABASE_URL=libsql://votre-base.turso.io",
+        "      DATABASE_AUTH_TOKEN=...",
+        "",
+        "  (Turso propose un niveau gratuit. Voir README, section",
+        "  « Où vivent les données ».)",
+        "",
+      ].join("\n"),
+    );
+    process.exit(1);
   }
 
   const dossierMigrations = join(process.cwd(), "drizzle");
