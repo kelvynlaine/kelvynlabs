@@ -79,11 +79,11 @@ export default async function PageEditionLecon({
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
-            {/* L'aperçu emprunte les composants de rendu du site public :
-                ce que l'admin voit est littéralement ce que verra le visiteur. */}
+            {/* Ouvre la vraie page publique de la leçon : ce que l'admin voit
+                est littéralement ce que verra le visiteur. */}
             <Button variant="outline" asChild>
               <Link
-                href={`/admin/formations/${formationId}/lecons/${leconId}/apercu`}
+                href={`/formations/${formation.slug}/lecons/${lecon.slug}`}
                 target="_blank"
                 rel="noopener noreferrer"
               >

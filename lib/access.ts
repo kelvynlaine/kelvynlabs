@@ -306,9 +306,14 @@ export async function checkRessourceAccess(
  * (c'est une vitrine) alors que son contenu sera verrouillé : les deux règles
  * doivent évoluer ensemble, dans le même fichier.
  */
-export async function listerFormationsVisibles(): Promise<
-  (Formation & { nbLecons: number })[]
-> {
+export type FormationVisible = Formation & {
+  nbLecons: number;
+  dureeMinutes: number;
+  /** Leçons visibles, dans l'ordre : sert de dénominateur à la progression. */
+  idsLecons: string[];
+};
+
+export async function listerFormationsVisibles(): Promise<FormationVisible[]> {
   const publiees = await db.query.formations.findMany({
     where: eq(formations.statut, "published"),
     orderBy: [asc(formations.ordre), asc(formations.creeLe)],
@@ -316,18 +321,30 @@ export async function listerFormationsVisibles(): Promise<
 
   if (publiees.length === 0) return [];
 
+  // Une seule requête pour toutes les formations, plutôt qu'une par carte :
+  // le catalogue reste à deux requêtes quel que soit le nombre de formations.
   const leconsPubliees = await db.query.lecons.findMany({
     where: eq(lecons.statut, "published"),
-    columns: { formationId: true },
+    columns: { id: true, formationId: true, dureeEstimeeMin: true },
+    orderBy: [asc(lecons.ordre)],
   });
 
-  const compte = new Map<string, number>();
-  for (const { formationId } of leconsPubliees) {
-    compte.set(formationId, (compte.get(formationId) ?? 0) + 1);
+  const parFormation = new Map<string, { ids: string[]; duree: number }>();
+
+  for (const lecon of leconsPubliees) {
+    const entree = parFormation.get(lecon.formationId) ?? { ids: [], duree: 0 };
+    entree.ids.push(lecon.id);
+    entree.duree += lecon.dureeEstimeeMin ?? 0;
+    parFormation.set(lecon.formationId, entree);
   }
 
-  return publiees.map((formation) => ({
-    ...formation,
-    nbLecons: compte.get(formation.id) ?? 0,
-  }));
+  return publiees.map((formation) => {
+    const entree = parFormation.get(formation.id);
+    return {
+      ...formation,
+      nbLecons: entree?.ids.length ?? 0,
+      dureeMinutes: entree?.duree ?? 0,
+      idsLecons: entree?.ids ?? [],
+    };
+  });
 }

@@ -81,9 +81,6 @@ export default async function PageEditionFormation({
 
   const estPubliee = formation.statut === "published";
 
-  // Première leçon dans l'ordre de lecture : point d'entrée de l'aperçu.
-  const premiereLecon = arborescence.flatMap((chapitre) => chapitre.lecons)[0];
-
   return (
     <div className="space-y-8">
       <div>
@@ -108,23 +105,19 @@ export default async function PageEditionFormation({
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
-            {/* L'aperçu s'ouvre sur la première leçon et utilise les composants
-                de rendu du site public : l'admin voit exactement ce que verra
-                un visiteur, brouillons compris grâce au mode aperçu de
-                checkAccess(). */}
-            <Button variant="outline" asChild disabled={!premiereLecon}>
-              {premiereLecon ? (
-                <Link
-                  href={`/admin/formations/${id}/lecons/${premiereLecon.id}/apercu`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  Aperçu
-                  <ExternalLink className="size-3.5" />
-                </Link>
-              ) : (
-                <span>Aperçu</span>
-              )}
+            {/* L'aperçu ouvre la VRAIE page publique. L'admin y voit les
+                brouillons parce que checkAccess() lui accorde ce droit, pas
+                parce qu'une page d'aperçu séparée contournerait la règle —
+                il n'y a donc aucun écart possible entre les deux rendus. */}
+            <Button variant="outline" asChild>
+              <Link
+                href={`/formations/${formation.slug}`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Aperçu
+                <ExternalLink className="size-3.5" />
+              </Link>
             </Button>
 
             <BoutonPublication

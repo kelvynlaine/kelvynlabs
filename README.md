@@ -3,7 +3,7 @@
 Plateforme de formations en ligne mono-créateur : un espace d'administration
 pour rédiger et structurer les formations, un espace client pour les consulter.
 
-**État : Phases 1 et 2 terminées.** Voir la [Roadmap](#roadmap).
+**État : Phases 1 à 3 terminées.** Voir la [Roadmap](#roadmap).
 
 ---
 
@@ -197,29 +197,37 @@ humaines. Recopiez régulièrement `/opt/sauvegardes` ailleurs.
 
 ```
 app/
-  page.tsx                     Accueil publique (→ catalogue en Phase 3)
+  (client)/                    Site public
+    page.tsx                   Catalogue
+    actions.ts                 Marquage de progression
+    formations/[slug]/         Page formation : sommaire, Commencer/Reprendre
+      lecons/[leconSlug]/      Lecteur : vidéo, contenu, ressources, navigation
+    not-found.tsx              404 publique
   api/
     fichiers/[...chemin]/      Sert les images (bucket public)
     ressources/[id]/           Sert les fichiers protégés — passe par checkAccess()
     admin/upload/              Réception des uploads (validation serveur)
     sante/                     Sonde de santé Docker
   admin/
+    installation/              Création du premier compte, se ferme ensuite
     login/                     Connexion — hors de la coquille admin
     (protege)/                 Tout ce qui exige requireAdmin()
       page.tsx                 Tableau de bord
       formations/              Liste, éditeur, arborescence
         [id]/lecons/[leconId]/ Éditeur de leçon
-                     apercu/   Aperçu avec les composants du site public
       medias/                  Bibliothèque
 components/
   ui/                          Primitives shadcn/ui
   admin/                       Composants d'administration
+  client/                      Composants du site public
   editeur/                     Tiptap (extensions partagées écriture/lecture)
   contenu/                     Rendu partagé admin ↔ site public
 lib/
   access.ts                    ⚠️ Contrôle d'accès — POINT D'ENTRÉE UNIQUE
   auth.ts                      Sessions administrateur
   mot-de-passe.ts              Hachage scrypt
+  visiteur.ts                  Identité anonyme (cookie de progression)
+  progression.ts               Calculs d'avancement
   stockage.ts                  Fichiers sur disque + validation
   chemins.ts                   Résolution de chemins + anti-traversée
   db/                          Schéma Drizzle, connexion, migrations
@@ -228,6 +236,43 @@ drizzle/                       Migrations SQL générées
 scripts/                       Création d'admin, sauvegarde
 deploy/                        Configuration Nginx
 ```
+
+### L'aperçu n'est pas une page à part
+
+Le bouton « Aperçu » de l'administration ouvre la **vraie page publique**.
+L'administrateur y voit les brouillons parce que `checkAccess()` lui accorde ce
+droit, pas parce qu'une page d'aperçu séparée contournerait la règle. Un
+bandeau l'avertit de ce qu'il regarde.
+
+C'est délibéré : une page d'aperçu distincte finit toujours par diverger de la
+page réelle, et l'écart ne se découvre qu'après publication.
+
+### Progression sans compte
+
+Le suivi d'avancement repose sur un UUID aléatoire dans un cookie **httpOnly**,
+inaccessible au JavaScript de la page. Trois conséquences :
+
+- **Aucune donnée personnelle.** Le cookie ne contient ni email, ni empreinte
+  de navigateur, ni identifiant publicitaire — seulement « ce navigateur a
+  coché ces leçons ».
+- **Le cookie n'est posé qu'au premier geste** qui en a besoin (cocher une
+  leçon). Qui parcourt le catalogue sans rien cocher repart sans cookie. C'est
+  ce qui permet de le qualifier de strictement fonctionnel, et donc de se
+  passer d'une bannière de consentement.
+- **Les écritures passent toutes par le serveur**, après `checkAccess()`. Si le
+  navigateur pouvait écrire directement, n'importe qui pourrait réécrire la
+  progression d'un autre visiteur en devinant son UUID — et enregistrer une
+  progression sur une leçon non publiée permettrait de les énumérer.
+
+La table `progressions` porte déjà une colonne `student_id`. Le jour où les
+comptes clients arriveront, la reprise tiendra en une requête au moment de la
+première connexion :
+
+```sql
+UPDATE progressions SET student_id = ? WHERE identifiant_client = ?;
+```
+
+Aucun visiteur ne perdra son avancement.
 
 ### La règle la plus importante du projet
 
@@ -273,6 +318,9 @@ contourne la règle.
   fichiers serait une primitive de lecture arbitraire sur le disque.
 - **Bucket `ressources` privé** : servi uniquement par `/api/ressources/[id]`,
   après `checkAccess()`, en `Content-Disposition: attachment`.
+- **Progression : jamais d'identifiant venu du client.** L'UUID du visiteur
+  est lu dans un cookie httpOnly, jamais dans les paramètres de la requête, et
+  l'écriture passe par `checkAccess()`.
 - **Rendu du contenu sans `dangerouslySetInnerHTML`** : le JSON Tiptap est
   parcouru et converti en éléments React. Seuls les types de nœuds explicitement
   listés produisent quelque chose ; la page ne peut pas rendre ce que le code ne
@@ -330,7 +378,7 @@ production.
 |---|---|---|
 | **1 — Fondations** | Next.js, Tailwind, shadcn/ui, schéma, auth, `checkAccess()` | ✅ Terminée |
 | **2 — CMS Admin** | CRUD formations/chapitres/leçons, Tiptap, uploads, glisser-déposer, bibliothèque, aperçu | ✅ Terminée |
-| **3 — Espace client** | Catalogue, page formation, lecteur de leçon, progression anonyme par cookie | ⏳ |
+| **3 — Espace client** | Catalogue, page formation, lecteur de leçon, progression anonyme par cookie | ✅ Terminée |
 | **4 — Polish UI/UX** | Design system finalisé, animations, responsive complet | ⏳ |
 | **5 — Préparation Stripe** | Branchement de `checkAccess()`, page « Achat à venir » — *structure uniquement* | ⏳ |
 
