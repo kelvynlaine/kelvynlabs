@@ -1,22 +1,28 @@
 import "server-only";
 
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNull, or } from "drizzle-orm";
 
 import { db } from "@/lib/db";
 import { lecons, progressions } from "@/lib/db/schema";
+import { getStudentCourant } from "@/lib/etudiant";
 import { getIdentifiantVisiteur } from "@/lib/visiteur";
 
 /**
- * Suivi de progression des visiteurs anonymes.
+ * Suivi de progression.
  *
- * En V1, la progression est rattachée à un UUID stocké dans un cookie
- * httpOnly. La table porte déjà une colonne `student_id` : le jour où les
- * comptes clients arriveront, la reprise des données tiendra en une requête
- * au moment de la première connexion —
+ * Deux identités possibles, et c'est volontaire :
  *
- *   UPDATE progressions SET student_id = ? WHERE identifiant_client = ?
+ *   · un visiteur ANONYME est suivi par un UUID en cookie httpOnly. Pas de
+ *     compte, pas d'email — cocher une leçon reste possible sans rien créer ;
+ *   · un client CONNECTÉ est suivi par son `student_id`, ce qui fait suivre
+ *     l'avancement d'un appareil à l'autre.
  *
- * — sans qu'aucun visiteur ne perde son avancement.
+ * À la connexion, `rattacherProgressionsAuClient()` transfère l'historique
+ * anonyme vers le compte : personne ne perd son avancement en se connectant.
+ *
+ * Les lectures interrogent les DEUX identités quand elles existent, puis
+ * fusionnent. Une leçon cochée sur un appareil avant connexion et une autre
+ * cochée ailleurs après comptent donc toutes les deux.
  */
 
 export type ProgressionFormation = {
@@ -46,18 +52,17 @@ export async function getProgressionFormation(
   idsLecons: string[],
 ): Promise<ProgressionFormation> {
   const nbTotal = idsLecons.length;
+  if (nbTotal === 0) return { ...PROGRESSION_VIDE, nbTotal };
 
-  const identifiant = await getIdentifiantVisiteur();
-  if (!identifiant || nbTotal === 0) {
-    return { ...PROGRESSION_VIDE, nbTotal };
-  }
+  const portee = await porteeProgression();
+  if (!portee) return { ...PROGRESSION_VIDE, nbTotal };
 
   const lignes = await db
     .select({ leconId: progressions.leconId })
     .from(progressions)
     .where(
       and(
-        eq(progressions.identifiantClient, identifiant),
+        portee,
         eq(progressions.complete, true),
         inArray(progressions.leconId, idsLecons),
       ),
@@ -73,20 +78,63 @@ export async function getProgressionFormation(
   };
 }
 
+/**
+ * Portée des lectures de progression : le compte s'il y en a un, plus le
+ * cookie anonyme s'il existe.
+ *
+ * Renvoie `undefined` quand il n'y a ni compte ni cookie — il n'y a alors rien
+ * à chercher, et surtout aucune condition à laisser vide dans un WHERE.
+ */
+async function porteeProgression() {
+  const student = await getStudentCourant();
+  const identifiant = await getIdentifiantVisiteur();
+
+  const conditions = [
+    student ? eq(progressions.studentId, student.id) : undefined,
+    identifiant ? eq(progressions.identifiantClient, identifiant) : undefined,
+  ].filter((condition) => condition !== undefined);
+
+  if (conditions.length === 0) return undefined;
+
+  return or(...conditions);
+}
+
 /** Vrai si le visiteur courant a terminé cette leçon. */
 export async function leconEstTerminee(leconId: string): Promise<boolean> {
-  const identifiant = await getIdentifiantVisiteur();
-  if (!identifiant) return false;
+  const portee = await porteeProgression();
+  if (!portee) return false;
 
   const ligne = await db.query.progressions.findFirst({
-    where: and(
-      eq(progressions.identifiantClient, identifiant),
-      eq(progressions.leconId, leconId),
-    ),
+    where: and(portee, eq(progressions.leconId, leconId), eq(progressions.complete, true)),
     columns: { complete: true },
   });
 
   return ligne?.complete ?? false;
+}
+
+/**
+ * Rattache au compte l'avancement pris avant la connexion.
+ *
+ * Appelée à chaque connexion, pas seulement à la première : un client qui
+ * coche des leçons déconnecté puis se reconnecte récupère aussi ces lignes.
+ *
+ * On ne réécrit que les lignes encore orphelines. Écraser un `student_id`
+ * existant permettrait, sur un poste partagé, de s'approprier l'avancement du
+ * compte précédent.
+ */
+export async function rattacherProgressionsAuClient(studentId: string): Promise<void> {
+  const identifiant = await getIdentifiantVisiteur();
+  if (!identifiant) return;
+
+  await db
+    .update(progressions)
+    .set({ studentId })
+    .where(
+      and(
+        eq(progressions.identifiantClient, identifiant),
+        isNull(progressions.studentId),
+      ),
+    );
 }
 
 /**
@@ -102,10 +150,16 @@ export async function enregistrerProgression(
   leconId: string,
   complete: boolean,
 ): Promise<void> {
+  // Rattacher la ligne au compte dès l'écriture, quand il y en a un : c'est ce
+  // qui fait que la leçon cochée ici sera vue depuis un autre appareil, sans
+  // attendre une prochaine connexion.
+  const student = await getStudentCourant();
+
   await db
     .insert(progressions)
     .values({
       identifiantClient: identifiant,
+      studentId: student?.id ?? null,
       leconId,
       complete,
       completeLe: complete ? new Date() : null,
@@ -117,6 +171,7 @@ export async function enregistrerProgression(
       set: {
         complete,
         completeLe: complete ? new Date() : null,
+        ...(student ? { studentId: student.id } : {}),
         misAJourLe: new Date(),
       },
     });

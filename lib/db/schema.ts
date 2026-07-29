@@ -226,6 +226,12 @@ export const medias = sqliteTable("medias", {
 export const students = sqliteTable("students", {
   id: id(),
   email: text("email").notNull(),
+  /**
+   * Volontairement INUTILISÉE et nullable : les clients se connectent par lien
+   * envoyé par email, pas par mot de passe (voir `jetonsConnexion`). La colonne
+   * reste pour n'imposer aucune migration destructrice si l'on ajoutait un jour
+   * un mot de passe optionnel.
+   */
   motDePasseHash: text("mot_de_passe_hash"),
   stripeCustomerId: text("stripe_customer_id"),
   creeLe: creeLe(),
@@ -236,16 +242,11 @@ export const students = sqliteTable("students", {
 /**
  * Sessions client.
  *
- * Tant qu'il n'existe pas de vraie connexion par email, c'est ce qui rattache
- * un navigateur à l'acheteur après un paiement réussi. Même construction que
- * les sessions admin : la base ne stocke que le SHA-256 du jeton, si bien
- * qu'une fuite ne permet pas de rejouer une session, et une session reste
- * révocable en supprimant sa ligne.
- *
- * ⚠️ Limite assumée de cette étape : l'accès acheté est lié au NAVIGATEUR.
- * Effacer ses cookies, ou ouvrir la formation depuis un autre appareil, fait
- * perdre l'accès. C'est la connexion par email (étape suivante) qui lèvera
- * cette limite — l'enrollment, lui, est déjà rattaché au student et survit.
+ * Rattache un navigateur à un acheteur, soit après un paiement réussi, soit
+ * après une connexion par lien envoyé par email. Même construction que les
+ * sessions admin : la base ne stocke que le SHA-256 du jeton, si bien qu'une
+ * fuite ne permet pas de rejouer une session, et une session reste révocable
+ * en supprimant sa ligne.
  */
 export const studentSessions = sqliteTable("student_sessions", {
   jetonHash: text("jeton_hash").primaryKey(),
@@ -257,6 +258,42 @@ export const studentSessions = sqliteTable("student_sessions", {
 }, (table) => [
   index("student_sessions_student_idx").on(table.studentId),
   index("student_sessions_expire_idx").on(table.expireLe),
+]);
+
+/**
+ * Jetons de connexion par email — les « liens magiques ».
+ *
+ * Pourquoi pas de mot de passe client : Stripe nous transmet déjà l'email
+ * VÉRIFIÉ de l'acheteur. Un lien envoyé à cette même adresse prouve exactement
+ * ce qu'il faut prouver — que la personne contrôle la boîte qui a payé. Un mot
+ * de passe ajouterait un secret à stocker, un parcours « oublié » à écrire, et
+ * ce parcours reposerait de toute façon sur l'email.
+ *
+ * Trois propriétés, chacune parant une attaque précise :
+ *
+ *   · seul le SHA-256 est stocké — une fuite de la base ne donne aucun jeton
+ *     rejouable, exactement comme pour les sessions ;
+ *   · `utiliseLe` rend le jeton à USAGE UNIQUE — un lien retrouvé plus tard
+ *     dans une boîte mail, ou dans l'historique d'un poste partagé, ne rouvre
+ *     rien ;
+ *   · l'expiration est COURTE (20 minutes) — la fenêtre pendant laquelle un
+ *     email intercepté a de la valeur reste étroite.
+ *
+ * La ligne est conservée après usage, pas supprimée : la distinction entre
+ * « jeton inconnu » et « jeton déjà utilisé » permet un message honnête plutôt
+ * qu'un échec opaque. La purge se fait à l'émission du jeton suivant.
+ */
+export const jetonsConnexion = sqliteTable("jetons_connexion", {
+  jetonHash: text("jeton_hash").primaryKey(),
+  studentId: text("student_id")
+    .notNull()
+    .references(() => students.id, { onDelete: "cascade" }),
+  expireLe: integer("expire_le", { mode: "timestamp_ms" }).notNull(),
+  utiliseLe: integer("utilise_le", { mode: "timestamp_ms" }),
+  creeLe: creeLe(),
+}, (table) => [
+  index("jetons_connexion_student_idx").on(table.studentId),
+  index("jetons_connexion_expire_idx").on(table.expireLe),
 ]);
 
 export const enrollments = sqliteTable("enrollments", {
@@ -346,6 +383,14 @@ export const sessionsRelations = relations(sessions, ({ one }) => ({
 export const studentsRelations = relations(students, ({ many }) => ({
   enrollments: many(enrollments),
   sessions: many(studentSessions),
+  jetonsConnexion: many(jetonsConnexion),
+}));
+
+export const jetonsConnexionRelations = relations(jetonsConnexion, ({ one }) => ({
+  student: one(students, {
+    fields: [jetonsConnexion.studentId],
+    references: [students.id],
+  }),
 }));
 
 export const enrollmentsRelations = relations(enrollments, ({ one }) => ({

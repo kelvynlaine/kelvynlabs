@@ -10,9 +10,13 @@ export function PiedDePage() {
           © {new Date().getFullYear()} {siteConfig.name}
         </p>
 
+        {/*
+          Reformulé depuis l'arrivée des comptes clients : « sans compte » est
+          devenu faux pour une partie des visiteurs. L'engagement qui tient
+          toujours, et qui est celui qui compte, c'est l'absence de traceur.
+        */}
         <p className="text-xs">
-          Votre progression est enregistrée sur cet appareil, sans compte ni
-          traceur.{" "}
+          Votre progression est enregistrée sans aucun traceur publicitaire.{" "}
           <Link
             href="/admin"
             className="hover:text-foreground underline underline-offset-4"

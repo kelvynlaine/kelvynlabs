@@ -15,6 +15,13 @@
       "when": 1785334397438,
       "tag": "0001_sessions_client",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1785350874677,
+      "tag": "0002_connexion_email",
+      "breakpoints": true
     }
   ]
 }

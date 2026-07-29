@@ -37,6 +37,30 @@ const schema = z.object({
   S3_ACCESS_KEY_ID: z.string().optional(),
   S3_SECRET_ACCESS_KEY: z.string().optional(),
 
+  /* --- Envoi d'email : nécessaire à la connexion des clients. -----------
+   *
+   * Deux chemins au choix, SMTP ou Resend. Tant qu'aucun n'est configuré, les
+   * emails sont écrits dans les logs au lieu d'être envoyés — pratique en
+   * développement, refusé en production (voir lib/email/index.ts).
+   */
+  SMTP_HOTE: z.string().optional(),
+  SMTP_PORT: z.coerce.number().int().positive().optional(),
+  SMTP_UTILISATEUR: z.string().optional(),
+  SMTP_MOT_DE_PASSE: z.string().optional(),
+
+  RESEND_API_KEY: z
+    .string()
+    .startsWith("re_", "La clé Resend commence par re_")
+    .optional(),
+
+  /**
+   * Adresse d'expédition, par exemple `Kelvynlabs <bonjour@kelvynlabs.fr>`.
+   *
+   * Elle doit appartenir à un domaine que le fournisseur vous autorise à
+   * utiliser, sinon l'envoi est refusé — ou pire, accepté puis classé en spam.
+   */
+  EMAIL_EXPEDITEUR: z.string().optional(),
+
   /* --- Bunny.net Stream : optionnel tant qu'on reste sur YouTube. --- */
   BUNNY_STREAM_LIBRARY_ID: z.string().optional(),
   BUNNY_STREAM_API_KEY: z.string().optional(),
@@ -106,6 +130,22 @@ export function stockageObjetEstConfigure(): boolean {
   return Boolean(
     e.S3_ENDPOINT && e.S3_BUCKET && e.S3_ACCESS_KEY_ID && e.S3_SECRET_ACCESS_KEY,
   );
+}
+
+/**
+ * SMTP exige les trois variables de connexion.
+ *
+ * Tout ou rien, pour la même raison que le stockage objet : une configuration
+ * partielle basculerait silencieusement sur le mode journal, et les emails de
+ * connexion cesseraient de partir sans qu'aucune erreur ne le signale.
+ */
+export function smtpEstConfigure(): boolean {
+  const e = getServerEnv();
+  return Boolean(e.SMTP_HOTE && e.SMTP_UTILISATEUR && e.SMTP_MOT_DE_PASSE);
+}
+
+export function resendEstConfigure(): boolean {
+  return Boolean(getServerEnv().RESEND_API_KEY);
 }
 
 /**

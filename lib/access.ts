@@ -4,7 +4,6 @@ import { asc, eq } from "drizzle-orm";
 
 import { estAdminCourant } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { stripeEstConfigure } from "@/lib/env.server";
 import { aUnEnrollmentActif, getStudentCourant } from "@/lib/etudiant";
 import {
   chapitres,
@@ -49,14 +48,14 @@ import {
 
 export type RaisonRefus =
   | "introuvable"
-  /** Formation payante non achetée par ce visiteur. */
-  | "paiement_requis"
   /**
-   * Réservé à l'étape suivante : contenu exigeant un compte connecté.
-   * Inutilisé tant que la connexion par email n'existe pas — l'accès après
-   * paiement repose pour l'instant sur un cookie (voir lib/etudiant.ts).
+   * Formation payante non achetée PAR CE VISITEUR.
+   *
+   * Recouvre deux situations que l'interface distingue : le visiteur n'a rien
+   * acheté (on lui propose de payer), ou il a acheté depuis un autre appareil
+   * (on lui propose de se connecter). Le refus, lui, est le même.
    */
-  | "connexion_requise";
+  | "paiement_requis";
 
 export type ResultatAcces<T> =
   | { autorise: true; donnee: T; apercuAdmin: boolean }
@@ -110,13 +109,23 @@ async function evaluerAcces(
   const estPayante = (formation.prixCents ?? 0) > 0;
   if (!estPayante) return { autorise: true };
 
-  // Stripe pas encore configuré : la formation a un prix mais rien ne permet
-  // de l'encaisser. On refuse plutôt que d'offrir un contenu destiné à être
-  // vendu — l'interface affiche « Achat à venir ».
-  if (!stripeEstConfigure()) {
-    return { autorise: false, raison: "paiement_requis" };
-  }
-
+  /*
+   * ⚠️ NE REMETTEZ PAS DE TEST SUR LA CONFIGURATION DE STRIPE ICI.
+   *
+   * Une version antérieure refusait l'accès dès que `stripeEstConfigure()`
+   * était faux, AVANT même de regarder si le visiteur avait acheté. L'intention
+   * était bonne — ne pas offrir un contenu destiné à être vendu — mais l'effet
+   * était de verrouiller les clients qui avaient réellement payé, dès que les
+   * clés Stripe manquaient : rotation de clés, bascule test → production, ou
+   * simple variable d'environnement perdue lors d'un redéploiement. Tous les
+   * clients payants perdaient l'accès en même temps, sans aucun signal.
+   *
+   * Ce test était de surcroît INUTILE : l'exigence d'un enrollment actif,
+   * juste en dessous, refuse déjà l'accès à qui n'a pas acheté. La
+   * configuration de Stripe décide de la possibilité de VENDRE, jamais de
+   * l'honorer d'un achat déjà conclu. Ce sont deux questions distinctes, et
+   * seule la seconde a sa place dans un contrôle d'accès.
+   */
   const student = await getStudentCourant();
   if (!student) return { autorise: false, raison: "paiement_requis" };
 
@@ -399,4 +408,31 @@ export async function listerFormationsVisibles(): Promise<FormationVisible[]> {
       idsLecons: entree?.ids ?? [],
     };
   });
+}
+
+/**
+ * Formations auxquelles le client connecté a réellement accès.
+ *
+ * Elle vit ICI, et non dans une page, parce qu'elle répond à une question
+ * d'accès : « à quoi cette personne a-t-elle droit ? ». La règle de visibilité
+ * — seules les formations publiées — reste ainsi appliquée au même endroit que
+ * partout ailleurs. Une formation dépubliée après un achat disparaît donc de
+ * la liste, comme elle disparaît du catalogue.
+ */
+export async function listerFormationsDuClient(): Promise<FormationVisible[]> {
+  const student = await getStudentCourant();
+  if (!student) return [];
+
+  const lignes = await db.query.enrollments.findMany({
+    where: (t, { and: et, eq: egal }) =>
+      et(egal(t.studentId, student.id), egal(t.statut, "actif")),
+    columns: { formationId: true },
+  });
+
+  if (lignes.length === 0) return [];
+
+  const achetees = new Set(lignes.map((ligne) => ligne.formationId));
+  const visibles = await listerFormationsVisibles();
+
+  return visibles.filter((formation) => achetees.has(formation.id));
 }

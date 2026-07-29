@@ -55,4 +55,14 @@ export const migrationsEmbarquees: readonly MigrationEmbarquee[] = [
       "CREATE INDEX `student_sessions_expire_idx` ON `student_sessions` (`expire_le`);",
     ],
   },
+  {
+    idx: 2,
+    tag: "0002_connexion_email",
+    quand: 1785350874677,
+    instructions: [
+      "CREATE TABLE `jetons_connexion` (\n\t`jeton_hash` text PRIMARY KEY NOT NULL,\n\t`student_id` text NOT NULL,\n\t`expire_le` integer NOT NULL,\n\t`utilise_le` integer,\n\t`cree_le` integer DEFAULT (unixepoch() * 1000) NOT NULL,\n\tFOREIGN KEY (`student_id`) REFERENCES `students`(`id`) ON UPDATE no action ON DELETE cascade\n);",
+      "CREATE INDEX `jetons_connexion_student_idx` ON `jetons_connexion` (`student_id`);",
+      "CREATE INDEX `jetons_connexion_expire_idx` ON `jetons_connexion` (`expire_le`);",
+    ],
+  },
 ] as const;

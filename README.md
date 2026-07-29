@@ -544,19 +544,37 @@ Le prix envoyé à Stripe est **relu en base**, jamais reçu du client : sans
 cela, il suffirait de modifier la requête pour acheter une formation à
 1 centime.
 
-### ⚠️ Limite à connaître avant de vendre
+### Connexion des clients
 
-Il n'existe pas encore de connexion par email. Après paiement, l'accès est
-rattaché au **navigateur** par un cookie de session :
+Les acheteurs se connectent **par lien envoyé par email**, sans mot de passe.
+Stripe transmet déjà l'adresse vérifiée de l'acheteur : un lien envoyé à cette
+même adresse prouve exactement ce qu'il faut prouver. Aucun secret client à
+stocker, aucun parcours « mot de passe oublié » à écrire.
 
-- effacer ses cookies fait perdre l'accès ;
-- ouvrir la formation depuis un autre appareil ne fonctionne pas.
+L'accès n'est donc **pas lié au navigateur** : l'achat appartient au compte, et
+se retrouve depuis n'importe quel appareil.
 
-**L'achat n'est pas perdu** — l'enrollment est enregistré en base et rattaché
-au client. Le jour où la connexion par email existera, ces clients
-récupéreront leur accès sans intervention. Mais tant que cette limite tient,
-prévenez vos acheteurs, ou n'activez le paiement qu'après avoir ajouté la
-connexion.
+Trois propriétés, chacune parant une attaque précise :
+
+| Propriété | Ce qu'elle empêche |
+|---|---|
+| Seul le SHA-256 du jeton est stocké | une fuite de la base ne donne aucun lien rejouable |
+| Usage unique | un lien retrouvé plus tard dans une boîte mail ne rouvre rien |
+| Expiration à 20 minutes | réduit la fenêtre d'un email intercepté |
+
+Deux détails qui ne se devinent pas :
+
+- **La confirmation se fait sur un POST**, jamais à l'ouverture du lien. Les
+  passerelles antispam et les générateurs d'aperçu (Outlook/Defender, Slack…)
+  visitent les URL contenues dans les emails : un jeton à usage unique
+  consommé sur un GET serait grillé par un robot avant que le client ne
+  l'ouvre.
+- **Le formulaire répond la même chose que l'adresse existe ou non.** Sans
+  cela, il deviendrait un oracle permettant de savoir qui est client.
+
+⚠️ **Configurez l'email avant d'ouvrir les ventes** (voir `.env.example`).
+Sans fournisseur, aucun lien ne part et un acheteur ne peut pas se reconnecter
+ailleurs. `/api/sante` indique le backend actif.
 
 ### Configuration en mode test
 
@@ -627,6 +645,4 @@ production.
 | **3 — Espace client** | Catalogue, page formation, lecteur de leçon, progression anonyme par cookie | ✅ Terminée |
 | **4 — Polish UI/UX** | États de chargement et d'erreur, accessibilité, performance, SEO, finitions responsive | ✅ Terminée |
 | **5 — Paiement Stripe** | Checkout, webhook signé, enrollments, `checkAccess()` payant, vitrine | ✅ Terminée |
-
-Prochaine étape naturelle : **la connexion par email** des clients, qui lèvera
-la limite décrite ci-dessous.
+| **6 — Connexion client** | Lien magique par email, espace « Mes formations », progression rattachée au compte | ✅ Terminée |

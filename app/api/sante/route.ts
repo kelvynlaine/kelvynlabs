@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { donneesHorsRepertoireDeploiement } from "@/lib/chemins";
 import { db } from "@/lib/db";
 import { admins } from "@/lib/db/schema";
+import { nomBackendEmail } from "@/lib/email";
 import { stripeEstConfigure } from "@/lib/env.server";
 import { nomStockage } from "@/lib/stockage";
 
@@ -28,7 +29,19 @@ export async function GET() {
     stockage: "inconnu" as string,
     persistance: "inconnu" as string,
     paiement: stripeEstConfigure() ? "configuré" : "non configuré",
+    /*
+     * Sans fournisseur d'email, les clients ne peuvent PAS se connecter depuis
+     * un autre appareil : le lien de connexion n'est jamais envoyé. C'est le
+     * genre de panne qu'aucun visiteur ne signale — on la voit ici.
+     */
+    email: "inconnu" as string,
   };
+
+  try {
+    diagnostic.email = nomBackendEmail();
+  } catch {
+    diagnostic.email = "indéterminé";
+  }
 
   try {
     diagnostic.stockage = nomStockage() === "s3" ? "objet (S3)" : "disque local";

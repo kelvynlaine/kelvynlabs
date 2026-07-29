@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { MenuCompte } from "@/components/client/menu-compte";
 import { Logo } from "@/components/logo";
 import { ThemeToggle } from "@/components/theme-toggle";
 
@@ -7,7 +8,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
  * En-tête du site public.
  *
  * Volontairement dépouillé : une plateforme de formation ne gagne rien à une
- * barre de navigation chargée. Le seul lien est le retour au catalogue.
+ * barre de navigation chargée. Retour au catalogue, état de connexion, thème.
  */
 // `children` et non `enfants` : c'est le nom que React attend pour le contenu
 // imbriqué. Le franciser casserait la syntaxe `<EnteteSite>…</EnteteSite>`.
@@ -22,6 +23,7 @@ export function EnteteSite({ children }: { children?: React.ReactNode }) {
         {children}
 
         <div className="ml-auto flex items-center gap-1">
+          <MenuCompte />
           <ThemeToggle />
         </div>
       </div>

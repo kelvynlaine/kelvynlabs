@@ -12,21 +12,15 @@ import { enrollments, students, studentSessions, type Student } from "@/lib/db/s
 /**
  * Identité d'un client ayant acheté une formation.
  *
- * ⚠️ LIMITE ASSUMÉE DE CETTE ÉTAPE — à lire avant de vendre quoi que ce soit.
+ * Une session s'ouvre par deux chemins, qui aboutissent au même endroit :
  *
- * Il n'existe pas encore de connexion par email. Après un paiement réussi,
- * l'accès est rattaché au NAVIGATEUR par un cookie de session. Conséquences :
+ *   · juste après un paiement réussi, depuis l'email transmis par Stripe ;
+ *   · à tout moment, via un lien de connexion envoyé par email
+ *     (voir `lib/connexion-client.ts`).
  *
- *   · effacer ses cookies fait perdre l'accès ;
- *   · ouvrir la formation depuis un autre appareil ne fonctionne pas.
- *
- * L'achat lui-même n'est PAS perdu : l'enrollment est enregistré en base et
- * rattaché au `student` créé depuis l'email fourni à Stripe. Le jour où la
- * connexion par email existera, ces clients récupéreront leur accès sans que
- * personne n'ait à retoucher la base.
- *
- * Tant que cette limite tient, prévenez vos acheteurs — ou n'activez le
- * paiement qu'une fois la connexion par email en place.
+ * L'accès n'est donc PAS lié au navigateur : l'enrollment appartient au
+ * `student`, et n'importe quel appareil peut le retrouver en prouvant qu'il
+ * contrôle l'adresse email qui a payé.
  */
 
 export const COOKIE_ETUDIANT = "kl_etudiant";
@@ -65,6 +59,26 @@ export async function ouvrirSessionEtudiant(studentId: string): Promise<void> {
     path: "/",
     expires: expireLe,
   });
+}
+
+/**
+ * Ferme la session courante.
+ *
+ * La ligne est SUPPRIMÉE en base, pas seulement le cookie effacé : sans cela,
+ * un jeton copié avant la déconnexion resterait valable jusqu'à son expiration.
+ * Se déconnecter doit révoquer, pas seulement oublier.
+ */
+export async function fermerSessionEtudiant(): Promise<void> {
+  const store = await cookies();
+  const jeton = store.get(COOKIE_ETUDIANT)?.value;
+
+  if (jeton) {
+    await db
+      .delete(studentSessions)
+      .where(eq(studentSessions.jetonHash, empreinteJeton(jeton)));
+  }
+
+  store.delete(COOKIE_ETUDIANT);
 }
 
 /** Client identifié pour la requête en cours, ou null. */

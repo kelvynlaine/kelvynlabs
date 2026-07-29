@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 import { BookOpen, Clock, Lock, ShieldCheck } from "lucide-react";
 
 import { BoutonAchat } from "@/components/client/bouton-achat";
@@ -116,6 +117,26 @@ export function VitrinePayante({
                   paiementActif={paiementActif}
                   dejaConnecte={dejaConnecte}
                 />
+
+                {/*
+                  Sortie de secours indispensable : un client qui a acheté
+                  depuis un autre appareil arrive ici et voit un bouton
+                  « Acheter ». Sans ce rappel, il paierait une seconde fois —
+                  ou renoncerait en pensant avoir perdu son accès.
+                  Inutile de l'afficher à quelqu'un déjà connecté : s'il voit
+                  cette page, c'est qu'il n'a pas acheté CETTE formation.
+                */}
+                {!dejaConnecte && (
+                  <p className="text-muted-foreground text-center text-xs">
+                    Déjà acheté&nbsp;?{" "}
+                    <Link
+                      href="/connexion"
+                      className="text-foreground underline underline-offset-4"
+                    >
+                      Connectez-vous
+                    </Link>
+                  </p>
+                )}
 
                 <ul className="text-muted-foreground space-y-2 border-t pt-4 text-xs">
                   <li className="flex items-start gap-2">

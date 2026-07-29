@@ -103,12 +103,19 @@ export default async function PageMerci({
               </Link>
             </Button>
 
-            {/* Limite à dire clairement plutôt qu'à laisser découvrir. */}
+            {/* Dire tout de suite comment revenir : c'est la question que se
+                pose l'acheteur au moment où il ferme l'onglet. */}
             <p className="text-muted-foreground border-border mt-10 border-t pt-6 text-xs leading-relaxed">
-              Votre accès est enregistré sur cet appareil. Tant que la connexion
-              par email n&apos;est pas disponible, effacer vos cookies ou
-              changer d&apos;appareil vous en fera perdre l&apos;usage — votre
-              achat, lui, reste enregistré et vous sera rendu.
+              Vous êtes connecté sur cet appareil. Pour retrouver votre
+              formation ailleurs — ou après avoir effacé vos cookies — utilisez{" "}
+              <Link
+                href="/connexion"
+                className="text-foreground underline underline-offset-4"
+              >
+                la connexion par email
+              </Link>{" "}
+              avec l&apos;adresse qui a servi au paiement. Aucun mot de passe à
+              retenir.
             </p>
           </>
         )}
