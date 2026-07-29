@@ -9,14 +9,14 @@
 FROM node:24-alpine AS deps
 WORKDIR /app
 
-# better-sqlite3 est un module natif : il se compile à l'installation, ce qui
-# exige une chaîne de compilation C++. Elle reste confinée à cette étape et
-# n'apparaît pas dans l'image finale.
-RUN apk add --no-cache python3 make g++ libc6-compat
+# libSQL est livré précompilé : plus besoin de Python ni de chaîne C++ ici.
+# Seul `libc6-compat` reste nécessaire, les binaires étant liés à la glibc
+# alors qu'Alpine utilise musl.
+RUN apk add --no-cache libc6-compat
 
 COPY package.json package-lock.json ./
-# `npm ci` respecte la liste `allowScripts` de package.json : les scripts
-# d'installation de better-sqlite3 et sharp s'exécutent, les autres non.
+# `npm ci` respecte la liste `allowScripts` de package.json : seuls les scripts
+# d'installation explicitement autorisés s'exécutent.
 RUN npm ci
 
 # --- 2. Build ----------------------------------------------------------------
@@ -59,9 +59,17 @@ COPY --from=builder /app/public ./public
 COPY --from=builder --chown=kelvynlabs:kelvynlabs /app/.next/standalone ./
 COPY --from=builder --chown=kelvynlabs:kelvynlabs /app/.next/static ./.next/static
 
-# Les migrations ne font pas partie de la trace du build : sans cette ligne,
+# Les migrations ne font pas partie de la trace du build : sans ces lignes,
 # l'application démarrerait sur une base vide et échouerait au premier accès.
 COPY --from=builder --chown=kelvynlabs:kelvynlabs /app/drizzle ./drizzle
+COPY --from=builder --chown=kelvynlabs:kelvynlabs /app/scripts/migrer.mjs ./scripts/migrer.mjs
+
+# Le script de migration vit hors du graphe de l'application : ses dépendances
+# ne sont donc PAS tracées par le build standalone. On les copie explicitement,
+# faute de quoi il échouerait sur « Cannot find module ».
+COPY --from=deps --chown=kelvynlabs:kelvynlabs /app/node_modules/drizzle-orm ./node_modules/drizzle-orm
+COPY --from=deps --chown=kelvynlabs:kelvynlabs /app/node_modules/@libsql ./node_modules/@libsql
+COPY --from=deps --chown=kelvynlabs:kelvynlabs /app/node_modules/libsql ./node_modules/libsql
 
 USER kelvynlabs
 EXPOSE 3000
@@ -70,4 +78,6 @@ VOLUME ["/data"]
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:3000/api/sante').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
-CMD ["node", "server.js"]
+# Les migrations s'appliquent avant le démarrage : un `docker compose up` avec
+# une nouvelle image suffit, sans étape manuelle à ne pas oublier.
+CMD ["sh", "-c", "node scripts/migrer.mjs && node server.js"]

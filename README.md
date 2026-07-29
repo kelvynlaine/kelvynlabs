@@ -13,7 +13,7 @@ pour rédiger et structurer les formations, un espace client pour les consulter.
 |---|---|---|
 | Framework | Next.js 15 (App Router) + TypeScript strict | SSR, Server Actions, un seul déploiement |
 | UI | Tailwind CSS v4 + shadcn/ui (Radix) | Composants accessibles, entièrement personnalisables |
-| Base de données | **SQLite** + Drizzle ORM | Un fichier sur votre serveur. Zéro service externe, zéro abonnement |
+| Base de données | **libSQL** (SQLite) + Drizzle ORM | Fichier local ou base distante, même code. Binaires précompilés : aucune compilation au déploiement |
 | Authentification | **Maison** : scrypt + sessions en base | Un seul compte à gérer ; pas de dépendance à un fournisseur |
 | Stockage | **Disque du serveur** | Les fichiers vivent à côté de la base, sur le même volume |
 | Éditeur | Tiptap (JSON en base) | Contenu re-rendable sans re-parser du balisage |
@@ -111,6 +111,22 @@ formation, ses vidéos devront passer sur Bunny.
 Ordre de grandeur : ~0,01 $/Go stocké par mois + ~0,005 $/Go de bande passante.
 
 ---
+
+## ⚠️ Où vivent les données
+
+Deux choses doivent survivre aux déploiements : la **base** et les **fichiers
+uploadés**.
+
+| Hébergement | Base | Fichiers |
+|---|---|---|
+| VPS avec volume Docker | fichier local (défaut) | disque du volume (défaut) |
+| Hostinger Node.js managé | **`DATABASE_URL` distante obligatoire** | **stockage objet obligatoire** |
+
+Sur un hébergement managé, le projet est reconstruit depuis git à chaque
+déploiement : tout ce qui est écrit sur le disque de l'application disparaît.
+Un fichier SQLite local y serait effacé à chaque mise en ligne, avec toutes les
+formations. Le code ne peut pas le deviner — c'est à la configuration de le
+dire.
 
 ## Déploiement sur VPS Hostinger
 
@@ -293,6 +309,38 @@ nulle part ailleurs. Les emplacements sont balisés `ÉTAPE STRIPE`.
 Le mode aperçu découle de la même fonction : l'admin voit les brouillons parce
 que `checkAccess()` le lui accorde explicitement, pas parce que la page
 contourne la règle.
+
+### Pourquoi libSQL et pas better-sqlite3
+
+Le premier déploiement Hostinger a échoué :
+
+```
+gyp ERR! find Python  Could not find any Python installation to use
+ERROR: Failed to install dependencies
+```
+
+`better-sqlite3` se compile à l'installation via node-gyp, ce qui exige Python
+et une chaîne C++ sur la machine de build. L'hébergement Node.js managé de
+Hostinger n'en a aucun.
+
+`@libsql/client` livre des binaires **déjà compilés** pour chaque plateforme :
+rien à construire, donc rien à installer sur l'hôte. libSQL étant un fork de
+SQLite, le dialecte est identique — le schéma et les migrations n'ont pas
+changé d'une ligne. Bénéfice second : le même code fonctionne sur un fichier
+local et sur une base distante, au prix d'une variable d'environnement.
+
+Deux conséquences dans la configuration :
+
+- **Le build de production utilise webpack, pas Turbopack.**
+  `node_modules/libsql/index.js` résout son binaire par un require dynamique —
+  ``require(`@libsql/${target}`)`` — que Turbopack transforme en « context
+  module » sur tout `node_modules/@libsql/`, jusqu'à tenter de parser les
+  fichiers `LICENSE` comme du JavaScript. Le mode développement reste sur
+  Turbopack, où le problème ne se pose pas.
+- **Les migrations sont sorties de l'application** (`scripts/migrer.mjs`,
+  lancé avant `next start`). Tant qu'elles étaient déclenchées depuis
+  `instrumentation.ts`, les deux bundlers les tiraient dans la compilation du
+  runtime Edge, où `node:fs` n'existe pas.
 
 ### Finitions (Phase 4)
 

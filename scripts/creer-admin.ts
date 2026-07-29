@@ -12,7 +12,6 @@
 import { eq, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
-import { appliquerMigrations } from "@/lib/db/migrate";
 import { admins } from "@/lib/db/schema";
 import { hacherMotDePasse } from "@/lib/mot-de-passe";
 
@@ -44,9 +43,6 @@ async function principal() {
     );
     process.exit(1);
   }
-
-  // La base peut ne pas exister encore : on pose le schéma avant d'écrire.
-  appliquerMigrations();
 
   const hash = await hacherMotDePasse(motDePasse);
 
