@@ -3,7 +3,7 @@
 Plateforme de formations en ligne mono-créateur : un espace d'administration
 pour rédiger et structurer les formations, un espace client pour les consulter.
 
-**État : Phases 1 à 4 terminées.** Voir la [Roadmap](#roadmap).
+**État : Phases 1 à 5 terminées.** Voir la [Roadmap](#roadmap).
 
 ---
 
@@ -388,6 +388,81 @@ Quelques décisions non évidentes prises pendant la passe de polissage :
 
 ---
 
+## Paiement Stripe
+
+### Ce qui est en place
+
+- **Stripe Checkout** — page de paiement hébergée par Stripe. Aucune donnée
+  bancaire ne transite par Kelvynlabs, ce qui écarte l'essentiel des
+  obligations PCI.
+- **Webhook signé** — `/api/stripe/webhook` refuse toute requête dont la
+  signature ne correspond pas. Sans cette vérification, n'importe qui pourrait
+  poster un faux « paiement réussi » et s'offrir toutes les formations.
+- **Enrollments** — un achat crée un `student` (depuis l'email fourni à
+  Stripe) et un `enrollment` actif. Un remboursement le repasse en
+  `rembourse`, ce qui referme l'accès immédiatement.
+- **Vitrine** — une formation payante non achetée n'est pas un 404 : elle
+  montre titre, description, prix et programme (titres et durées), jamais le
+  contenu.
+
+Le prix envoyé à Stripe est **relu en base**, jamais reçu du client : sans
+cela, il suffirait de modifier la requête pour acheter une formation à
+1 centime.
+
+### ⚠️ Limite à connaître avant de vendre
+
+Il n'existe pas encore de connexion par email. Après paiement, l'accès est
+rattaché au **navigateur** par un cookie de session :
+
+- effacer ses cookies fait perdre l'accès ;
+- ouvrir la formation depuis un autre appareil ne fonctionne pas.
+
+**L'achat n'est pas perdu** — l'enrollment est enregistré en base et rattaché
+au client. Le jour où la connexion par email existera, ces clients
+récupéreront leur accès sans intervention. Mais tant que cette limite tient,
+prévenez vos acheteurs, ou n'activez le paiement qu'après avoir ajouté la
+connexion.
+
+### Configuration en mode test
+
+Le webhook a besoin d'une **URL publique**. En local, on ne crée donc pas
+d'endpoint dans le dashboard : on utilise le CLI Stripe, qui relaie les
+événements vers la machine de développement.
+
+```bash
+brew install stripe/stripe-cli/stripe   # ou https://stripe.com/docs/stripe-cli
+stripe login
+stripe listen --forward-to localhost:3000/api/stripe/webhook
+```
+
+La commande affiche un secret `whsec_…` : c'est celui à mettre dans
+`.env.local`, avec la clé secrète de test (`sk_test_…`, Dashboard >
+Développeurs > Clés API).
+
+Déclencher un paiement de test :
+
+```bash
+stripe trigger checkout.session.completed
+```
+
+Ou, plus réaliste, en achetant depuis le site avec la carte de test
+`4242 4242 4242 4242`, n'importe quelle date future et n'importe quel CVC.
+
+### Passage en production
+
+1. Créer l'endpoint dans le Dashboard (mode **Live**) :
+   `https://votre-domaine.fr/api/stripe/webhook`
+2. Sélectionner les événements :
+   `checkout.session.completed`, `checkout.session.async_payment_succeeded`,
+   `checkout.session.async_payment_failed`, `charge.refunded`
+3. Copier le secret de signature de CET endpoint — il diffère de celui du CLI.
+4. Remplacer `sk_test_…` par `sk_live_…` et `whsec_…` par celui du dashboard.
+
+⚠️ Vérifiez que `NEXT_PUBLIC_SITE_URL` pointe bien sur le domaine de
+production : c'est lui qui construit les URLs de retour après paiement.
+
+---
+
 ## Scripts
 
 | Commande | Effet |
@@ -416,6 +491,7 @@ production.
 | **2 — CMS Admin** | CRUD formations/chapitres/leçons, Tiptap, uploads, glisser-déposer, bibliothèque, aperçu | ✅ Terminée |
 | **3 — Espace client** | Catalogue, page formation, lecteur de leçon, progression anonyme par cookie | ✅ Terminée |
 | **4 — Polish UI/UX** | États de chargement et d'erreur, accessibilité, performance, SEO, finitions responsive | ✅ Terminée |
-| **5 — Préparation Stripe** | Branchement de `checkAccess()`, page « Achat à venir » — *structure uniquement* | ⏳ |
+| **5 — Paiement Stripe** | Checkout, webhook signé, enrollments, `checkAccess()` payant, vitrine | ✅ Terminée |
 
-L'intégration réelle de Stripe fera l'objet d'une session dédiée.
+Prochaine étape naturelle : **la connexion par email** des clients, qui lèvera
+la limite décrite ci-dessous.

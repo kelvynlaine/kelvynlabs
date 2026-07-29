@@ -10,7 +10,10 @@ import { formaterDuree } from "@/components/client/carte-formation";
 import { EnteteSite } from "@/components/client/entete-site";
 import { SommaireFormation } from "@/components/client/sommaire-formation";
 import { Button } from "@/components/ui/button";
-import { checkAccess } from "@/lib/access";
+import { VitrinePayante } from "@/components/client/vitrine-payante";
+import { checkAccess, getVitrineFormation } from "@/lib/access";
+import { stripeEstConfigure } from "@/lib/env.server";
+import { getStudentCourant } from "@/lib/etudiant";
 import { getProgressionFormation, prochaineLecon } from "@/lib/progression";
 import { siteConfig } from "@/lib/site-config";
 
@@ -24,9 +27,14 @@ export async function generateMetadata({
   const { slug } = await params;
   const acces = await checkAccess({ slug });
 
-  if (!acces.autorise) return { title: "Formation introuvable" };
+  // Une formation payante non achetée reste une page publique : son titre doit
+  // apparaître dans l'onglet et dans les partages, sinon la vitrine
+  // s'annoncerait elle-même comme « introuvable ».
+  const formation = acces.autorise
+    ? acces.donnee
+    : await getVitrineFormation(slug);
 
-  const formation = acces.donnee;
+  if (!formation) return { title: "Formation introuvable" };
 
   return {
     title: formation.titre,
@@ -54,9 +62,27 @@ export default async function PageFormation({
   const { slug } = await params;
 
   // Contrôle d'accès unique — voir lib/access.ts. Cette page ne teste jamais
-  // `statut` elle-même.
+  // `statut` ni le paiement elle-même.
   const acces = await checkAccess({ slug });
-  if (!acces.autorise) notFound();
+
+  if (!acces.autorise) {
+    // Formation payante non achetée : on montre la vitrine plutôt qu'un 404.
+    // Renvoyer « introuvable » à un acheteur potentiel serait absurde.
+    if (acces.raison === "paiement_requis") {
+      const vitrine = await getVitrineFormation(slug);
+      if (!vitrine) notFound();
+
+      return (
+        <VitrinePayante
+          formation={vitrine}
+          paiementActif={stripeEstConfigure()}
+          dejaConnecte={(await getStudentCourant()) !== null}
+        />
+      );
+    }
+
+    notFound();
+  }
 
   const { donnee: formation, apercuAdmin } = acces;
 

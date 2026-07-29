@@ -4,6 +4,8 @@ import { asc, eq } from "drizzle-orm";
 
 import { estAdminCourant } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { stripeEstConfigure } from "@/lib/env.server";
+import { aUnEnrollmentActif, getStudentCourant } from "@/lib/etudiant";
 import {
   chapitres,
   formations,
@@ -38,15 +40,22 @@ import {
  *   En contrepartie, la surface d'attaque a diminué : le navigateur ne parle
  *   plus jamais à la base, uniquement au serveur Next.js.
  *
- *   Les emplacements à modifier pour brancher Stripe sont balisés « ÉTAPE STRIPE ».
+ *   Depuis la Phase 5, cette fonction décide AUSSI du paiement : une formation
+ *   payante n'est accessible qu'à un client dont l'enrollment est actif. Le
+ *   verrou vaut donc pour tout ce qui passe par ici — pages, fichiers
+ *   téléchargeables, progression — sans qu'aucun appelant n'ait été modifié.
  *
  * ========================================================================== */
 
 export type RaisonRefus =
   | "introuvable"
-  /** Réservé à la V2 : formation payante non achetée. */
+  /** Formation payante non achetée par ce visiteur. */
   | "paiement_requis"
-  /** Réservé à la V2 : contenu réservé aux comptes connectés. */
+  /**
+   * Réservé à l'étape suivante : contenu exigeant un compte connecté.
+   * Inutilisé tant que la connexion par email n'existe pas — l'accès après
+   * paiement repose pour l'instant sur un cookie (voir lib/etudiant.ts).
+   */
   | "connexion_requise";
 
 export type ResultatAcces<T> =
@@ -71,13 +80,13 @@ export type FormationComplete = Formation & {
 /**
  * Applique la politique d'accès à une formation déjà chargée.
  *
- * C'est la seule fonction à faire évoluer quand la monétisation arrivera :
- * tout le reste de ce fichier n'est que de la récupération de données.
+ * C'est la seule fonction qui décide. Tout le reste de ce fichier n'est que de
+ * la récupération de données.
  */
-function evaluerAcces(
+async function evaluerAcces(
   formation: Formation,
   apercuAdmin: boolean,
-): { autorise: true } | { autorise: false; raison: RaisonRefus } {
+): Promise<{ autorise: true } | { autorise: false; raison: RaisonRefus }> {
   // L'admin voit tout, brouillons compris : c'est le « mode aperçu ».
   if (apercuAdmin) return { autorise: true };
 
@@ -88,18 +97,31 @@ function evaluerAcces(
     return { autorise: false, raison: "introuvable" };
   }
 
-  /* ---- ÉTAPE STRIPE (V2) — décommenter le jour du branchement -------------
+  /* ---- Formations payantes ----------------------------------------------
    *
-   * const estPayante = (formation.prixCents ?? 0) > 0;
-   * if (estPayante) {
-   *   const student = await getStudentCourant();
-   *   if (!student) return { autorise: false, raison: "connexion_requise" };
-   *   if (!(await aUnEnrollmentActif(student.id, formation.id))) {
-   *     return { autorise: false, raison: "paiement_requis" };
-   *   }
-   * }
+   * C'est ICI, et uniquement ici, que le paiement conditionne l'accès. Toutes
+   * les pages, toutes les routes de fichiers et l'enregistrement de la
+   * progression passent par cette fonction : verrouiller ici verrouille tout
+   * d'un coup, y compris les endpoints qui ne rendent pas de HTML.
    *
-   * ------------------------------------------------------------------------ */
+   * Une formation dont le prix est nul ou absent reste entièrement gratuite —
+   * le comportement d'avant Stripe est donc strictement préservé.
+   */
+  const estPayante = (formation.prixCents ?? 0) > 0;
+  if (!estPayante) return { autorise: true };
+
+  // Stripe pas encore configuré : la formation a un prix mais rien ne permet
+  // de l'encaisser. On refuse plutôt que d'offrir un contenu destiné à être
+  // vendu — l'interface affiche « Achat à venir ».
+  if (!stripeEstConfigure()) {
+    return { autorise: false, raison: "paiement_requis" };
+  }
+
+  const student = await getStudentCourant();
+  if (!student) return { autorise: false, raison: "paiement_requis" };
+
+  const inscrit = await aUnEnrollmentActif(student.id, formation.id);
+  if (!inscrit) return { autorise: false, raison: "paiement_requis" };
 
   return { autorise: true };
 }
@@ -176,7 +198,7 @@ export async function checkAccess(
     return { autorise: false, raison: "introuvable", formation: null };
   }
 
-  const verdict = evaluerAcces(complete, apercuAdmin);
+  const verdict = await evaluerAcces(complete, apercuAdmin);
   if (!verdict.autorise) {
     return { autorise: false, raison: verdict.raison, formation: complete };
   }
@@ -194,6 +216,36 @@ export async function checkAccess(
     autorise: true,
     apercuAdmin,
     donnee: { ...complete, chapitres: sommaire },
+  };
+}
+
+/**
+ * Données de VITRINE d'une formation payante non achetée.
+ *
+ * Une formation verrouillée ne doit pas renvoyer un 404 : le visiteur doit
+ * pouvoir voir ce qu'il achète. Cette fonction expose délibérément le titre,
+ * la description, le prix et le PROGRAMME — c'est-à-dire les titres des
+ * chapitres et des leçons, leur durée, rien de plus.
+ *
+ * ⚠️ Elle ne donne jamais accès au CONTENU : ni texte de leçon, ni vidéo, ni
+ * ressource. `FormationComplete` ne transporte que des intitulés — c'est ce
+ * qui rend cette exposition sûre. Ne l'élargissez pas sans y repenser.
+ *
+ * Renvoie null si la formation n'existe pas ou n'est pas publiée : la vitrine
+ * ne contourne pas la règle de publication.
+ */
+export async function getVitrineFormation(
+  slug: string,
+): Promise<FormationComplete | null> {
+  const complete = await chargerSommaire({ slug });
+  if (!complete || complete.statut !== "published") return null;
+
+  return {
+    ...complete,
+    chapitres: complete.chapitres.map((chapitre) => ({
+      ...chapitre,
+      lecons: chapitre.lecons.filter((lecon) => lecon.statut === "published"),
+    })),
   };
 }
 
@@ -284,7 +336,7 @@ export async function checkRessourceAccess(
     return { autorise: false, raison: "introuvable", formation: null };
   }
 
-  const verdict = evaluerAcces(formation, apercuAdmin);
+  const verdict = await evaluerAcces(formation, apercuAdmin);
   if (!verdict.autorise) {
     return { autorise: false, raison: verdict.raison, formation };
   }

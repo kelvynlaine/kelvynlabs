@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, ArrowRight, PartyPopper } from "lucide-react";
 
 import { BandeauApercu } from "@/components/client/bandeau-apercu";
@@ -48,7 +48,14 @@ export default async function PageLecon({
   // formation : un futur paywall posé sur la formation protégera cette page
   // sans modification ici.
   const acces = await checkLeconAccess(slug, leconSlug);
-  if (!acces.autorise) notFound();
+
+  if (!acces.autorise) {
+    // Formation payante non achetée : on renvoie vers la vitrine, où le
+    // visiteur voit ce qu'il achète. Un 404 lui laisserait croire que la
+    // leçon n'existe pas.
+    if (acces.raison === "paiement_requis") redirect(`/formations/${slug}`);
+    notFound();
+  }
 
   const { donnee, apercuAdmin } = acces;
   const { lecon, ressources, formation, precedente, suivante } = donnee;

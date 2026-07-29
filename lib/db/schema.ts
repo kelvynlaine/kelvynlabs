@@ -233,6 +233,32 @@ export const students = sqliteTable("students", {
   uniqueIndex("students_email_unique").on(sql`lower(${table.email})`),
 ]);
 
+/**
+ * Sessions client.
+ *
+ * Tant qu'il n'existe pas de vraie connexion par email, c'est ce qui rattache
+ * un navigateur à l'acheteur après un paiement réussi. Même construction que
+ * les sessions admin : la base ne stocke que le SHA-256 du jeton, si bien
+ * qu'une fuite ne permet pas de rejouer une session, et une session reste
+ * révocable en supprimant sa ligne.
+ *
+ * ⚠️ Limite assumée de cette étape : l'accès acheté est lié au NAVIGATEUR.
+ * Effacer ses cookies, ou ouvrir la formation depuis un autre appareil, fait
+ * perdre l'accès. C'est la connexion par email (étape suivante) qui lèvera
+ * cette limite — l'enrollment, lui, est déjà rattaché au student et survit.
+ */
+export const studentSessions = sqliteTable("student_sessions", {
+  jetonHash: text("jeton_hash").primaryKey(),
+  studentId: text("student_id")
+    .notNull()
+    .references(() => students.id, { onDelete: "cascade" }),
+  expireLe: integer("expire_le", { mode: "timestamp_ms" }).notNull(),
+  creeLe: creeLe(),
+}, (table) => [
+  index("student_sessions_student_idx").on(table.studentId),
+  index("student_sessions_expire_idx").on(table.expireLe),
+]);
+
 export const enrollments = sqliteTable("enrollments", {
   id: id(),
   studentId: text("student_id")
@@ -317,6 +343,29 @@ export const sessionsRelations = relations(sessions, ({ one }) => ({
   admin: one(admins, { fields: [sessions.adminId], references: [admins.id] }),
 }));
 
+export const studentsRelations = relations(students, ({ many }) => ({
+  enrollments: many(enrollments),
+  sessions: many(studentSessions),
+}));
+
+export const enrollmentsRelations = relations(enrollments, ({ one }) => ({
+  student: one(students, {
+    fields: [enrollments.studentId],
+    references: [students.id],
+  }),
+  formation: one(formations, {
+    fields: [enrollments.formationId],
+    references: [formations.id],
+  }),
+}));
+
+export const studentSessionsRelations = relations(studentSessions, ({ one }) => ({
+  student: one(students, {
+    fields: [studentSessions.studentId],
+    references: [students.id],
+  }),
+}));
+
 /* ==========================================================================
  * Types inférés — à utiliser partout plutôt que de redéclarer des interfaces
  * ========================================================================== */
@@ -331,6 +380,9 @@ export type LeconInsert = typeof lecons.$inferInsert;
 export type Ressource = typeof ressources.$inferSelect;
 export type Media = typeof medias.$inferSelect;
 export type Progression = typeof progressions.$inferSelect;
+export type Student = typeof students.$inferSelect;
+export type Enrollment = typeof enrollments.$inferSelect;
+export type StudentSession = typeof studentSessions.$inferSelect;
 
 export type Statut = (typeof STATUTS)[number];
 export type ProviderVideo = (typeof PROVIDERS_VIDEO)[number];
