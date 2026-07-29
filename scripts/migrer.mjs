@@ -22,6 +22,30 @@ import { createClient } from "@libsql/client";
 import { drizzle } from "drizzle-orm/libsql";
 import { migrate } from "drizzle-orm/libsql/migrator";
 
+/**
+ * Détecte un hébergement dont le disque est recréé à chaque déploiement.
+ *
+ * Sur ce type de plateforme, le projet est reconstruit depuis git : tout ce
+ * qui a été écrit sur le disque de l'application disparaît. Un fichier SQLite
+ * local y serait effacé à chaque mise en ligne, avec toutes les formations —
+ * et le symptôme n'apparaît qu'AU DEUXIÈME déploiement, quand le contenu a
+ * déjà été saisi. C'est exactement le genre de panne qu'il faut rendre
+ * impossible plutôt que documenter.
+ */
+function disqueProbablementEphemere() {
+  const indices = [
+    // Hostinger Node.js managé reconstruit dans .builds/source/repository
+    process.cwd().includes("/.builds/"),
+    // Plateformes managées courantes
+    Boolean(process.env.VERCEL),
+    Boolean(process.env.NETLIFY),
+    Boolean(process.env.RENDER),
+    Boolean(process.env.RAILWAY_ENVIRONMENT),
+  ];
+
+  return indices.some(Boolean);
+}
+
 function configuration() {
   const distante = process.env.DATABASE_URL?.trim();
 
@@ -31,6 +55,34 @@ function configuration() {
       authToken: process.env.DATABASE_AUTH_TOKEN?.trim(),
       description: "base distante",
     };
+  }
+
+  // Refuser de démarrer vaut infiniment mieux que de démarrer, accepter du
+  // contenu, puis l'effacer au déploiement suivant sans prévenir.
+  if (disqueProbablementEphemere() && process.env.AUTORISER_BASE_EPHEMERE !== "1") {
+    console.error(
+      [
+        "",
+        "✗ REFUS DE DÉMARRER — risque de perte de données",
+        "",
+        "  Cet hébergement reconstruit l'application à chaque déploiement :",
+        "  le disque est recréé, et une base SQLite locale y serait effacée",
+        "  à chaque mise en ligne, avec toutes vos formations.",
+        "",
+        "  Renseignez une base distante :",
+        "",
+        "      DATABASE_URL=libsql://votre-base.turso.io",
+        "      DATABASE_AUTH_TOKEN=...",
+        "",
+        "  (Turso propose un niveau gratuit. Voir README, section",
+        "  « Où vivent les données ».)",
+        "",
+        "  Si vous savez ce que vous faites et acceptez de perdre les données",
+        "  à chaque déploiement, posez AUTORISER_BASE_EPHEMERE=1.",
+        "",
+      ].join("\n"),
+    );
+    process.exit(1);
   }
 
   const dossier = resolve(process.env.DOSSIER_DONNEES?.trim() || ".data");

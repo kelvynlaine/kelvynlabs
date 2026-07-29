@@ -1,26 +1,47 @@
 import "server-only";
 
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
-import { dirname, extname, join } from "node:path";
+import { extname, join } from "node:path";
 
 import { dossierUploads, resoudreCheminUpload } from "@/lib/chemins";
+import { stockageObjetEstConfigure } from "@/lib/env.server";
+import { backendDisque } from "@/lib/stockage/disque";
+import { backendS3 } from "@/lib/stockage/s3";
 
 /**
- * Stockage des fichiers sur le disque du serveur.
+ * Stockage des fichiers.
  *
- * Remplace Supabase Storage. Toute l'application passe par ce module : le jour
- * où il faudrait basculer vers un stockage objet (Cloudflare R2, S3…), seules
- * les quatre fonctions ci-dessous changeraient — les appelants, non.
+ * Toute l'application passe par ce module — c'est ce qui a permis d'ajouter le
+ * stockage objet sans toucher une seule ligne ailleurs : ni les routes qui
+ * servent les fichiers, ni l'upload, ni la bibliothèque de médias.
+ *
+ * Deux backends, choisis par les variables d'environnement :
+ *   · disque → fichiers à côté de la base, sous DOSSIER_DONNEES (par défaut) ;
+ *   · S3     → stockage objet compatible S3 (Cloudflare R2, Backblaze B2…),
+ *              dès que les quatre variables S3_* sont renseignées.
+ *
+ * ⚠️ Sur un hébergement dont le disque est recréé à chaque déploiement, le
+ * backend disque ferait disparaître images et ressources à chaque mise en
+ * ligne. Le backend S3 est alors obligatoire.
  *
  * Deux « buckets », deux régimes d'accès :
- *   · medias     → images. Servies publiquement par /api/fichiers.
+ *   · medias     → images. Servies par /api/fichiers.
  *   · ressources → PDF et fichiers téléchargeables. Servis UNIQUEMENT par
  *                  /api/ressources/[id], après passage par checkAccess().
  *
  * Aucun fichier n'est écrit dans `public/` : ce dossier est figé au build et
  * serait de toute façon écrasé au redéploiement.
  */
+
+/** Backend actif. Le choix se fait à la configuration, jamais dans le code. */
+function backend() {
+  return stockageObjetEstConfigure() ? backendS3 : backendDisque;
+}
+
+/** Nom du backend actif — affiché dans les diagnostics. */
+export function nomStockage(): string {
+  return backend().nom;
+}
 
 export type Bucket = "medias" | "ressources";
 
@@ -130,12 +151,20 @@ export async function enregistrerFichier(
 
   const extension = EXTENSIONS[mimeType] ?? extname(fichier.name).toLowerCase();
   const chemin = join(bucket, `${randomUUID()}${extension}`);
-  const destination = resoudreCheminUpload(chemin);
 
-  if (!destination) return { erreur: "Chemin de destination invalide." };
+  // Le chemin est construit par nous (bucket + UUID), mais on le repasse par
+  // la barrière anti-traversée : une régression future dans la génération ne
+  // doit pas pouvoir écrire hors du dossier autorisé.
+  if (!resoudreCheminUpload(chemin)) {
+    return { erreur: "Chemin de destination invalide." };
+  }
 
-  await mkdir(dirname(destination), { recursive: true });
-  await writeFile(destination, octets);
+  try {
+    await backend().ecrire(chemin, octets);
+  } catch (erreur) {
+    console.error("[stockage] écriture impossible", erreur);
+    return { erreur: "Enregistrement du fichier impossible." };
+  }
 
   const dimensions = mimeType.startsWith("image/") ? dimensionsImage(octets) : null;
 
@@ -151,27 +180,16 @@ export async function enregistrerFichier(
 
 /** Supprime un fichier. Silencieux s'il a déjà disparu. */
 export async function supprimerFichier(cheminRelatif: string): Promise<void> {
-  const chemin = resoudreCheminUpload(cheminRelatif);
-  if (!chemin) return;
-
-  try {
-    await unlink(chemin);
-  } catch {
-    // Fichier déjà absent : ce n'est pas une erreur du point de vue de
-    // l'appelant, qui voulait simplement qu'il ne soit plus là.
-  }
+  if (!resoudreCheminUpload(cheminRelatif)) return;
+  await backend().supprimer(cheminRelatif);
 }
 
 /** Lit un fichier. `null` si absent ou si le chemin sort du dossier autorisé. */
 export async function lireFichier(cheminRelatif: string): Promise<Buffer | null> {
-  const chemin = resoudreCheminUpload(cheminRelatif);
-  if (!chemin) return null;
-
-  try {
-    return await readFile(chemin);
-  } catch {
-    return null;
-  }
+  // La vérification anti-traversée s'applique aux DEUX backends : sur S3 elle
+  // empêche qu'un chemin forgé aille lire une clé hors des préfixes attendus.
+  if (!resoudreCheminUpload(cheminRelatif)) return null;
+  return backend().lire(cheminRelatif);
 }
 
 /** URL publique d'un média. Les ressources privées n'en ont pas. */

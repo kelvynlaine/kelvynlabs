@@ -120,13 +120,79 @@ uploadés**.
 | Hébergement | Base | Fichiers |
 |---|---|---|
 | VPS avec volume Docker | fichier local (défaut) | disque du volume (défaut) |
-| Hostinger Node.js managé | **`DATABASE_URL` distante obligatoire** | **stockage objet obligatoire** |
+| Hostinger Node.js managé | **`DATABASE_URL` distante obligatoire** | **variables `S3_*` obligatoires** |
 
 Sur un hébergement managé, le projet est reconstruit depuis git à chaque
 déploiement : tout ce qui est écrit sur le disque de l'application disparaît.
 Un fichier SQLite local y serait effacé à chaque mise en ligne, avec toutes les
-formations. Le code ne peut pas le deviner — c'est à la configuration de le
-dire.
+formations.
+
+**Le projet refuse de démarrer dans ce cas.** `scripts/migrer.mjs` détecte les
+hébergements à disque éphémère et s'arrête avec un message explicite tant que
+`DATABASE_URL` n'est pas renseignée. Mieux vaut un déploiement qui échoue tout
+de suite qu'un déploiement qui réussit, accepte du contenu, puis l'efface au
+suivant — panne qui ne se manifeste qu'une fois le mal fait.
+
+## Déploiement sur Hostinger — Node.js managé
+
+Aucune clé API n'est nécessaire : tout se fait dans hPanel.
+
+### 1. Préparer les deux services (gratuits)
+
+**Base de données — Turso**
+
+```bash
+curl -sSfL https://get.tur.so/install.sh | bash
+turso auth signup
+turso db create kelvynlabs
+turso db show kelvynlabs --url          # → DATABASE_URL
+turso db tokens create kelvynlabs       # → DATABASE_AUTH_TOKEN
+```
+
+**Fichiers — Cloudflare R2** (10 Go gratuits)
+
+Créez un bucket, puis un jeton d'API R2 avec accès en lecture/écriture. Relevez
+l'endpoint `https://<compte>.r2.cloudflarestorage.com`, le nom du bucket et les
+deux clés.
+
+⚠️ Laissez le bucket **privé**. Les fichiers restent servis par l'application,
+jamais par une URL publique : c'est ce qui permet à `checkAccess()` de protéger
+les ressources des formations payantes.
+
+### 2. Créer l'application dans hPanel
+
+*Sites web → Ajouter un site web → Applications Node.js → Importer un dépôt Git*
+
+| Réglage | Valeur |
+|---|---|
+| Dépôt | `kelvynlaine/kelvynlabs`, branche `main` |
+| Version de Node | 22 ou plus |
+| Commande d'installation | `npm ci` |
+| Commande de build | `npm run build` |
+| Commande de démarrage | `npm start` |
+
+`npm start` applique les migrations avant de lancer le serveur : il n'y a
+aucune étape manuelle à ne pas oublier.
+
+### 3. Variables d'environnement
+
+| Variable | Valeur |
+|---|---|
+| `DATABASE_URL` | l'URL Turso |
+| `DATABASE_AUTH_TOKEN` | le jeton Turso |
+| `S3_ENDPOINT` | l'endpoint R2 |
+| `S3_BUCKET` | le nom du bucket |
+| `S3_ACCESS_KEY_ID` | la clé R2 |
+| `S3_SECRET_ACCESS_KEY` | le secret R2 |
+| `NEXT_PUBLIC_SITE_URL` | `https://votre-domaine.fr` |
+
+Les variables Stripe s'ajoutent au même endroit le jour où vous vendez.
+
+### 4. Créer le compte administrateur
+
+Une fois le site en ligne, ouvrez `https://votre-domaine.fr/admin/installation`.
+La page se ferme définitivement dès qu'un compte existe — faites-le tout de
+suite après le premier déploiement.
 
 ## Déploiement sur VPS Hostinger
 

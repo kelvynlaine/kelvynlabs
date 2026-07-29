@@ -26,6 +26,17 @@ const schema = z.object({
   /** Provider vidéo proposé par défaut dans l'admin. */
   VIDEO_PROVIDER_DEFAULT: z.enum(["youtube", "bunny"]).default("youtube"),
 
+  /* --- Stockage objet : optionnel, obligatoire sur disque éphémère. ------
+   *
+   * Compatible S3 : Cloudflare R2, Backblaze B2, Scaleway, MinIO, S3.
+   * Tant que ces variables sont absentes, les fichiers vont sur le disque.
+   */
+  S3_ENDPOINT: z.url("S3_ENDPOINT doit être une URL").optional(),
+  S3_REGION: z.string().optional(),
+  S3_BUCKET: z.string().optional(),
+  S3_ACCESS_KEY_ID: z.string().optional(),
+  S3_SECRET_ACCESS_KEY: z.string().optional(),
+
   /* --- Bunny.net Stream : optionnel tant qu'on reste sur YouTube. --- */
   BUNNY_STREAM_LIBRARY_ID: z.string().optional(),
   BUNNY_STREAM_API_KEY: z.string().optional(),
@@ -80,6 +91,20 @@ export function bunnyEstConfigure(): boolean {
   const e = getServerEnv();
   return Boolean(
     e.BUNNY_STREAM_LIBRARY_ID && e.BUNNY_STREAM_API_KEY && e.BUNNY_STREAM_CDN_HOSTNAME,
+  );
+}
+
+/**
+ * Le stockage objet exige les quatre variables.
+ *
+ * Tout ou rien : une configuration partielle ferait basculer silencieusement
+ * sur le disque local, et sur un hébergement éphémère les fichiers
+ * disparaîtraient au déploiement suivant sans que rien ne l'ait signalé.
+ */
+export function stockageObjetEstConfigure(): boolean {
+  const e = getServerEnv();
+  return Boolean(
+    e.S3_ENDPOINT && e.S3_BUCKET && e.S3_ACCESS_KEY_ID && e.S3_SECRET_ACCESS_KEY,
   );
 }
 
